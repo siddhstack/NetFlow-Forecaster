@@ -86,7 +86,7 @@ function Invoke-ContainerLab($Action) {
 function Invoke-ModelPipeline($Python, $InputCsv, $OutputDir) {
     Log-Step "Training LSTM"
     Push-Location $MlDir
-    & $Python train_model.py --data $InputCsv --epochs $Epochs --output-dir $OutputDir
+    & $Python enhanced_train.py --data $InputCsv --epochs $Epochs --output-dir $OutputDir
     if ($LASTEXITCODE -ne 0) {
         Pop-Location
         throw "Model training failed."

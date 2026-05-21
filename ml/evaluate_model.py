@@ -18,6 +18,7 @@ import pandas as pd
 import torch
 from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
 
+from enhanced_train import EnhancedMultivariateTrafficLSTM
 from train_model import FEATURES, MultivariateTrafficLSTM
 from run_layout import artifact_path, ensure_run_layout, find_artifact
 
@@ -281,7 +282,10 @@ def benchmark_model(run_dir: Path, metrics_json: dict, test_rows: int, repeats: 
     hidden_size = int(training.get("hidden_size", 256))
     layers = int(training.get("layers", 2))
     input_feature_count = int(len(training.get("feature_columns", FEATURES)))
-    model = MultivariateTrafficLSTM(input_feature_count, hidden_size, layers, len(FEATURES))
+    if training.get("architecture") == "attention_lstm":
+        model = EnhancedMultivariateTrafficLSTM(input_feature_count, hidden_size, layers, len(FEATURES))
+    else:
+        model = MultivariateTrafficLSTM(input_feature_count, hidden_size, layers, len(FEATURES))
     model.load_state_dict(torch.load(model_path, map_location="cpu"))
     model.eval()
 

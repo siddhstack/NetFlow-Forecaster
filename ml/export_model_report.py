@@ -10,6 +10,7 @@ import numpy as np
 import pandas as pd
 import torch
 
+from enhanced_train import EnhancedMultivariateTrafficLSTM
 from train_model import FEATURES, MultivariateTrafficLSTM
 from run_layout import artifact_path, ensure_run_layout, find_artifact
 
@@ -197,7 +198,10 @@ def main() -> None:
     feature_columns = list(training.get("feature_columns", FEATURES))
     input_feature_count = len(feature_columns)
 
-    model = MultivariateTrafficLSTM(input_feature_count, hidden_size, layers, len(FEATURES))
+    if training.get("architecture") == "attention_lstm":
+        model = EnhancedMultivariateTrafficLSTM(input_feature_count, hidden_size, layers, len(FEATURES))
+    else:
+        model = MultivariateTrafficLSTM(input_feature_count, hidden_size, layers, len(FEATURES))
     state = torch.load(model_path, map_location="cpu")
     model.load_state_dict(state)
 
@@ -215,8 +219,8 @@ def main() -> None:
             "model_readable_summary.json",
         ],
         "architecture": {
-            "model_type": "Multivariate LSTM",
-            "input_features": FEATURES,
+            "model_type": "Enhanced Attention LSTM" if training.get("architecture") == "attention_lstm" else "Multivariate LSTM",
+            "input_features": feature_columns,
             "output_features": FEATURES,
             "sequence_length": sequence_length,
             "hidden_size": hidden_size,

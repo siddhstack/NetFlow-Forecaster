@@ -65,7 +65,7 @@ install_deps() {
 run_ml() {
   log "Training LSTM"
   cd "$ML_DIR"
-  python train_model.py --data "$DATA_FILE" --epochs "$EPOCHS" --output-dir "$RUN_DIR"
+  python enhanced_train.py --data "$DATA_FILE" --epochs "$EPOCHS" --output-dir "$RUN_DIR"
   log "Building dashboard"
   python visualize.py --data "$RUN_DIR/raw_data/telemetry.csv" --output-dir "$RUN_DIR"
   log "Evaluating model"
