@@ -10,7 +10,7 @@ import numpy as np
 import pandas as pd
 import torch
 
-from enhanced_train import EnhancedMultivariateTrafficLSTM
+from enhanced_train import EnhancedMultivariateTrafficLSTM, StackedHybridLSTM
 from train_model import FEATURES, MultivariateTrafficLSTM
 from run_layout import artifact_path, ensure_run_layout, find_artifact
 
@@ -200,8 +200,10 @@ def main() -> None:
 
     if training.get("architecture") == "attention_lstm":
         model = EnhancedMultivariateTrafficLSTM(input_feature_count, hidden_size, layers, len(FEATURES))
-    elif training.get("architecture") in {"hybrid_lstm_gradient_boosting", "hybrid_attention_lstm_gradient_boosting"}:
+    elif training.get("architecture") == "hybrid_attention_lstm_gradient_boosting":
         model = EnhancedMultivariateTrafficLSTM(input_feature_count, hidden_size, layers, len(FEATURES))
+    elif training.get("architecture") == "hybrid_lstm_gradient_boosting":
+        model = StackedHybridLSTM(input_feature_count, hidden_size, layers, len(FEATURES))
     else:
         model = MultivariateTrafficLSTM(input_feature_count, hidden_size, layers, len(FEATURES))
     state = torch.load(model_path, map_location="cpu")

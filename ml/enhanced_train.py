@@ -1,4 +1,4 @@
-"""Hybrid Ensemble: LSTM + Gradient Boosting - production grade."""
+"""Hybrid LSTM + Gradient Boosting trainer for telemetry experiments."""
 
 from __future__ import annotations
 
@@ -45,6 +45,19 @@ class EnhancedMultivariateTrafficLSTM(nn.Module):
         return self.head(context)
 
 
+class StackedHybridLSTM(nn.Module):
+    """Legacy stacked LSTM used by earlier hybrid runs before attention was added."""
+
+    def __init__(self, input_size: int = 7, hidden_size: int = 128, num_layers: int = 2, output_size: int = 3):
+        super().__init__()
+        self.lstm = nn.LSTM(input_size, hidden_size, num_layers, batch_first=True, dropout=0.1 if num_layers > 1 else 0.0)
+        self.head = nn.Linear(hidden_size, output_size)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        out, _ = self.lstm(x)
+        return self.head(out[:, -1])
+
+
 SimpleLSTM = EnhancedMultivariateTrafficLSTM
 
 
@@ -57,9 +70,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--hidden-size", type=int, default=128)
     parser.add_argument("--layers", type=int, default=2)
     parser.add_argument("--lr", type=float, default=0.001)
-    parser.add_argument("--train-split", type=float, default=0.82)
-    parser.add_argument("--validation-split", type=float, default=0.70)
-    parser.add_argument("--early-stop-patience", type=int, default=12)
+    parser.add_argument("--train-ratio", type=float, default=0.70, help="Chronological training fraction.")
+    parser.add_argument("--test-ratio", type=float, default=0.82, help="Chronological test start fraction; validation is between train and test.")
+    parser.add_argument("--train-split", type=float, default=None, help="Deprecated alias for --test-ratio.")
+    parser.add_argument("--validation-split", type=float, default=None, help="Deprecated alias for --train-ratio.")
+    parser.add_argument("--early-stop-patience", type=int, default=16)
     parser.add_argument("--early-stop-delta", type=float, default=1e-5)
     parser.add_argument("--gb-weight", type=float, default=0.65)
     parser.add_argument("--lstm-weight", type=float, default=0.35)
@@ -119,14 +134,18 @@ def main() -> None:
     df = load_dataset(data_path)
     transformed = transform_features(df)
     feature_cols = INPUT_FEATURES if all(c in transformed.columns for c in TIME_FEATURES) else FEATURES
+    train_ratio = args.validation_split if args.validation_split is not None else args.train_ratio
+    test_ratio = args.train_split if args.train_split is not None else args.test_ratio
+    if not 0.0 < train_ratio < test_ratio < 1.0:
+        raise ValueError("Expected 0 < train_ratio < test_ratio < 1.")
 
     x_seq, _ = create_sequences(transformed[feature_cols].to_numpy(dtype=np.float32), args.sequence_length)
     _, y_seq = create_sequences(transformed[FEATURES].to_numpy(dtype=np.float32), args.sequence_length)
     if len(x_seq) < 10:
         raise ValueError("Not enough sequences. Reduce --sequence-length or collect more rows.")
 
-    train_end = max(1, min(len(x_seq) - 2, int(args.validation_split * len(x_seq))))
-    test_start = max(train_end + 1, min(len(x_seq) - 1, int(args.train_split * len(x_seq))))
+    train_end = max(1, min(len(x_seq) - 2, int(train_ratio * len(x_seq))))
+    test_start = max(train_end + 1, min(len(x_seq) - 1, int(test_ratio * len(x_seq))))
     x_train_raw, y_train_raw = x_seq[:train_end], y_seq[:train_end]
     x_val_raw, y_val_raw = x_seq[train_end:test_start], y_seq[train_end:test_start]
     x_test_raw, y_test_raw = x_seq[test_start:], y_seq[test_start:]
@@ -151,7 +170,7 @@ def main() -> None:
 
     lstm = SimpleLSTM(len(feature_cols), args.hidden_size, args.layers, len(FEATURES)).to(device)
     optimizer = torch.optim.AdamW(lstm.parameters(), lr=args.lr, weight_decay=1e-4)
-    scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode="min", factor=0.5, patience=5)
+    scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode="min", factor=0.5, patience=8, min_lr=1e-5)
     criterion = nn.MSELoss()
 
     print("Training Hybrid LSTM component...")
@@ -179,6 +198,7 @@ def main() -> None:
             val_pred = lstm(x_val_tensor)
             val_loss = criterion(val_pred, y_val_tensor).item()
         scheduler.step(val_loss)
+        train_loss_mean = float(np.mean(losses))
         if val_loss < best_val - args.early_stop_delta:
             best_val = val_loss
             best_epoch = epoch + 1
@@ -189,13 +209,13 @@ def main() -> None:
         train_rows.append(
             {
                 "epoch": epoch + 1,
-                "mse_loss": float(np.mean(losses)),
+                "mse_loss": train_loss_mean,
                 "validation_mse_loss": float(val_loss),
                 "learning_rate": float(optimizer.param_groups[0]["lr"]),
             }
         )
         if epoch % 20 == 0 or epoch == args.epochs - 1:
-            print(f"LSTM Epoch {epoch + 1} Loss: {np.mean(losses):.4f} | Val: {val_loss:.4f}")
+            print(f"LSTM Epoch {epoch + 1} Loss: {train_loss_mean:.4f} | Val: {val_loss:.4f}")
         if args.early_stop_patience > 0 and stale_epochs >= args.early_stop_patience:
             print(f"Early stopping at epoch {epoch + 1}; best validation loss was epoch {best_epoch}.")
             break
@@ -287,8 +307,8 @@ def main() -> None:
             "epochs": len(train_rows),
             "best_epoch": best_epoch,
             "best_validation_mse_loss": best_val,
-            "validation_split": args.validation_split,
-            "test_split": args.train_split,
+            "train_ratio": train_ratio,
+            "test_ratio": test_ratio,
             "architecture": "hybrid_attention_lstm_gradient_boosting",
             "ensemble": "lstm_gradient_boosting",
             "early_stop_patience": args.early_stop_patience,

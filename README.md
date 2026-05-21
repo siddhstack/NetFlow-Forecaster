@@ -51,6 +51,45 @@ from earlier experiments, but new hybrid runs are labeled
 The trainer uses CUDA automatically when PyTorch can see a GPU, and otherwise
 falls back to CPU.
 
+## How The Pieces Connect
+
+The project has three main data paths:
+
+- Synthetic data: `ml/generate_data.py` creates offline telemetry for demos and
+  repeatable experiments.
+- Kaggle data: `ml/load_kaggle_data.py` loads external network traffic rows for
+  larger dataset-style trials.
+- Live data: `scripts/collect_telemetry.py` samples a running ContainerLab
+  topology.
+
+Those paths all produce the same core columns:
+
+```text
+timestamp,traffic_mbps,latency_ms,packet_loss_pct
+```
+
+The runner scripts connect the pipeline:
+
+- `run.ps1` is the main Windows entrypoint.
+- `run.sh` is the Linux/WSL entrypoint.
+- `ml/enhanced_train.py` trains the current hybrid model.
+- `ml/visualize.py` creates the prediction dashboard and spike summary.
+- `ml/evaluate_model.py` compares the model against simple baselines.
+- `ml/export_model_report.py` writes human-readable model summaries.
+- `ml/compare_sequence_models.py` runs controlled LSTM/GRU/attention ablations.
+
+Why each part matters:
+
+- The LSTM branch learns temporal sequence behavior from lookback windows.
+- The Gradient Boosting branch uses lag and rolling-window features that are
+  often strong for abrupt tabular spike patterns.
+- The ensemble weight search uses validation data to choose the blend instead
+  of assuming one fixed weight is always best.
+- The dashboards make model behavior inspectable instead of hiding everything
+  behind one score.
+- The ablation runner helps prove whether attention or other sequence changes
+  actually help on the current dataset.
+
 ## Current Limitations
 
 - The neural model has temporal attention, but it is not a Transformer or a
@@ -128,6 +167,31 @@ Skip dependency installation after packages are already installed:
 .\run.ps1 synthetic -Samples 2000 -Epochs 40 -SkipInstall
 ```
 
+## Sample End-To-End Trial
+
+This trial uses the checked-in sample data at `ml/telemetry.csv`, trains the
+hybrid model, creates graphs, and writes evaluation tables.
+
+```powershell
+python ml\enhanced_train.py --data ml\telemetry.csv --output-dir runs\sample_hybrid_trial --epochs 40 --device auto
+python ml\visualize.py --data runs\sample_hybrid_trial\raw_data\telemetry.csv --output-dir runs\sample_hybrid_trial --sensitivity 1.3
+python ml\evaluate_model.py --run-dir runs\sample_hybrid_trial
+python ml\export_model_report.py --run-dir runs\sample_hybrid_trial
+```
+
+Inspect these outputs:
+
+- Data used: `runs/sample_hybrid_trial/raw_data/telemetry.csv`
+- Prediction graph: `runs/sample_hybrid_trial/images/traffic_prediction_dashboard.png`
+- Evaluation graph: `runs/sample_hybrid_trial/images/model_evaluation_dashboard.png`
+- Metrics: `runs/sample_hybrid_trial/json/evaluation_summary.json`
+- Baseline comparison: `runs/sample_hybrid_trial/results/evaluation_baselines.csv`
+- Spike metrics: `runs/sample_hybrid_trial/results/evaluation_spikes.csv`
+- Prediction intervals: `runs/sample_hybrid_trial/results/prediction_intervals.csv`
+
+Do not treat one trial as proof of model superiority. Compare multiple runs and
+use the baseline/ablation outputs before making claims about improvement.
+
 Every run creates a timestamped folder under `runs/`, for example:
 
 ```text
@@ -202,8 +266,9 @@ The hybrid trainer uses:
 - Temporal attention: additive attention over LSTM time steps
 - Stability: residual final-state connection plus `LayerNorm`
 - LSTM epochs: controlled by `-Epochs` or `--epochs`
-- Early stopping: validation loss patience of `12` epochs by default
-- Learning-rate scheduler: `ReduceLROnPlateau`, factor `0.5`, patience `5`
+- Chronological split: `--train-ratio 0.70`, validation until `--test-ratio 0.82`, test after that
+- Early stopping: validation-loss patience coordinated with the LR scheduler
+- Learning-rate scheduler: `ReduceLROnPlateau`, factor `0.5`, patience `8`, min LR `1e-5`
 - Gradient Boosting estimators: `300`
 - Gradient Boosting learning rate: `0.05`
 - Gradient Boosting max depth: `5`
@@ -223,6 +288,21 @@ Change sensitivity when visualizing:
 ```powershell
 python ml\visualize.py --data runs\hybrid_manual\raw_data\telemetry.csv --output-dir runs\hybrid_manual --sensitivity 1.3
 ```
+
+## Baseline Comparison
+
+Use the ablation runner before claiming an architecture improvement. It trains
+the same split across LSTM, GRU, mean-pooling LSTM, and attention-LSTM variants,
+then writes MSE, MAE, SMAPE, spike F1, and epoch counts.
+
+```powershell
+python ml\compare_sequence_models.py --data ml\telemetry.csv --output-dir runs\sequence_comparison --epochs 40
+```
+
+Outputs:
+
+- `results/sequence_model_comparison.csv`
+- `json/sequence_model_comparison.json`
 
 ## Kaggle And Dataset Modes
 
