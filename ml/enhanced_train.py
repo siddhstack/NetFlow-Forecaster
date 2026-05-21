@@ -1,4 +1,4 @@
-"""Enhanced Spiky LSTM with Attention - fixed mini-batch version."""
+"""Stable Enhanced LSTM - good balance of spike reactivity."""
 
 from __future__ import annotations
 
@@ -27,21 +27,21 @@ if hasattr(sys.stdout, "reconfigure"):
 
 
 class EnhancedMultivariateTrafficLSTM(nn.Module):
-    def __init__(self, input_size: int, hidden_size: int = 256, num_layers: int = 2, output_size: int = 3, dropout: float = 0.2):
+    def __init__(self, input_size: int, hidden_size: int = 128, num_layers: int = 2, output_size: int = 3, dropout: float = 0.15):
         super().__init__()
         self.lstm = nn.LSTM(input_size, hidden_size, num_layers, batch_first=True, dropout=dropout if num_layers > 1 else 0.0)
-        self.attention = nn.Sequential(nn.Linear(hidden_size, 64), nn.Tanh(), nn.Linear(64, 1))
-        self.head = nn.Sequential(nn.Linear(hidden_size, 128), nn.ReLU(), nn.Dropout(dropout), nn.Linear(128, output_size))
+        self.attention = nn.Sequential(nn.Linear(hidden_size, 32), nn.Tanh(), nn.Linear(32, 1))
+        self.head = nn.Sequential(nn.Linear(hidden_size, 64), nn.ReLU(), nn.Dropout(dropout), nn.Linear(64, output_size))
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         lstm_out, _ = self.lstm(x)
-        attn_weights = torch.softmax(self.attention(lstm_out), dim=1)
-        context = torch.sum(attn_weights * lstm_out, dim=1)
+        attn = torch.softmax(self.attention(lstm_out), dim=1)
+        context = torch.sum(attn * lstm_out, dim=1)
         return self.head(context)
 
 
 class SpikeWeightedLoss(nn.Module):
-    def __init__(self, thresholds: torch.Tensor, spike_weight: float = 6.0, focal_gamma: float = 1.2):
+    def __init__(self, thresholds: torch.Tensor, spike_weight: float = 4.5, focal_gamma: float = 0.8):
         super().__init__()
         self.register_buffer("thresholds", thresholds)
         self.spike_weight = spike_weight
@@ -50,26 +50,26 @@ class SpikeWeightedLoss(nn.Module):
     def forward(self, pred: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
         error = (pred - target).abs()
         focal = 1.0 + error.pow(self.focal_gamma)
-        spike_weights = 1.0 + self.spike_weight * (target > self.thresholds).float()
-        return (spike_weights * focal * (pred - target) ** 2).mean()
+        spike_w = 1.0 + self.spike_weight * (target > self.thresholds).float()
+        return (spike_w * focal * (pred - target) ** 2).mean()
 
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser()
     parser.add_argument("--data", default="ml/telemetry.csv")
-    parser.add_argument("--sequence-length", type=int, default=64)
-    parser.add_argument("--hidden-size", type=int, default=256)
+    parser.add_argument("--sequence-length", type=int, default=48)
+    parser.add_argument("--hidden-size", type=int, default=128)
     parser.add_argument("--layers", type=int, default=2)
-    parser.add_argument("--epochs", type=int, default=150)
+    parser.add_argument("--epochs", type=int, default=120)
     parser.add_argument("--batch-size", type=int, default=32)
-    parser.add_argument("--lr", type=float, default=0.001)
-    parser.add_argument("--spike-quantile", type=float, default=0.85)
-    parser.add_argument("--spike-weight", type=float, default=6.0)
-    parser.add_argument("--focal-gamma", type=float, default=1.2)
+    parser.add_argument("--lr", type=float, default=0.0008)
+    parser.add_argument("--spike-quantile", type=float, default=0.88)
+    parser.add_argument("--spike-weight", type=float, default=4.5)
+    parser.add_argument("--focal-gamma", type=float, default=0.8)
     parser.add_argument("--train-split", type=float, default=0.8)
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--output", default="lstm_model.pth")
-    parser.add_argument("--output-dir", default="runs/enhanced_fixed")
+    parser.add_argument("--output-dir", default="runs/stable_enhanced")
     return parser.parse_args()
 
 
@@ -87,7 +87,7 @@ def main() -> None:
 
     df = load_dataset(data_path)
     transformed_df = transform_features(df)
-    feature_columns = INPUT_FEATURES if all(name in transformed_df.columns for name in TIME_FEATURES) else FEATURES
+    feature_columns = INPUT_FEATURES if all(c in transformed_df.columns for c in TIME_FEATURES) else FEATURES
 
     raw_inputs = transformed_df[feature_columns].to_numpy(dtype=np.float32)
     raw_targets = transformed_df[FEATURES].to_numpy(dtype=np.float32)
@@ -97,7 +97,7 @@ def main() -> None:
     if len(x) < 10:
         raise ValueError("Not enough sequences. Reduce --sequence-length or collect more rows.")
 
-    split = max(1, min(len(x) - 1, int(len(x) * args.train_split)))
+    split = max(1, min(len(x) - 1, int(args.train_split * len(x))))
     x_train, y_train = x[:split], y[:split]
     x_test, y_test = x[split:], y[split:]
 
@@ -108,37 +108,40 @@ def main() -> None:
     y_train = target_scaler.fit_transform(y_train)
     y_test = target_scaler.transform(y_test)
 
-    train_ds = TensorDataset(torch.tensor(x_train, dtype=torch.float32), torch.tensor(y_train, dtype=torch.float32))
-    train_loader = DataLoader(train_ds, batch_size=args.batch_size, shuffle=True)
+    train_loader = DataLoader(
+        TensorDataset(torch.tensor(x_train, dtype=torch.float32), torch.tensor(y_train, dtype=torch.float32)),
+        batch_size=args.batch_size,
+        shuffle=True,
+    )
     x_test_tensor = torch.tensor(x_test, dtype=torch.float32)
     y_test_tensor = torch.tensor(y_test, dtype=torch.float32)
 
-    model = EnhancedMultivariateTrafficLSTM(len(feature_columns), args.hidden_size, args.layers, len(FEATURES))
-    raw_thresholds = np.quantile(raw_targets[: split + args.sequence_length], args.spike_quantile, axis=0)
-    scaled_thresholds = target_scaler.transform(raw_thresholds.reshape(1, -1))[0]
-    spike_thresholds = torch.tensor(scaled_thresholds, dtype=torch.float32)
+    model = EnhancedMultivariateTrafficLSTM(len(feature_columns), args.hidden_size, args.layers)
+    raw_th = np.quantile(raw_targets[: split + args.sequence_length], args.spike_quantile, axis=0)
+    scaled_th = target_scaler.transform(raw_th.reshape(1, -1))[0]
+    spike_thresholds = torch.tensor(scaled_th, dtype=torch.float32)
     criterion = SpikeWeightedLoss(spike_thresholds, args.spike_weight, args.focal_gamma)
     optimizer = torch.optim.AdamW(model.parameters(), lr=args.lr, weight_decay=1e-4)
 
-    print("Training Fixed Enhanced Model...")
+    print("Training Stable Enhanced Model...")
+    best_state = copy.deepcopy(model.state_dict())
     best_val = float("inf")
     best_epoch = 0
-    best_state = copy.deepcopy(model.state_dict())
     train_rows: list[dict[str, float]] = []
 
     for epoch in range(args.epochs):
         model.train()
         batch_losses: list[float] = []
         batch_mses: list[float] = []
-        for batch_x, batch_y in train_loader:
+        for bx, by in train_loader:
             optimizer.zero_grad()
-            pred = model(batch_x)
-            loss = criterion(pred, batch_y)
+            pred = model(bx)
+            loss = criterion(pred, by)
             loss.backward()
             torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
             optimizer.step()
             batch_losses.append(float(loss.item()))
-            batch_mses.append(float(torch.mean((pred - batch_y) ** 2).item()))
+            batch_mses.append(float(torch.mean((pred - by) ** 2).item()))
 
         model.eval()
         with torch.no_grad():
@@ -160,7 +163,7 @@ def main() -> None:
                 "learning_rate": float(optimizer.param_groups[0]["lr"]),
             }
         )
-        if (epoch + 1) % 20 == 0 or epoch == 0 or epoch == args.epochs - 1:
+        if (epoch + 1) % 30 == 0 or epoch == 0 or epoch == args.epochs - 1:
             print(f"Epoch {epoch + 1:3d} | Val Loss: {val_loss:.4f}")
 
     model.load_state_dict(best_state)
@@ -168,12 +171,13 @@ def main() -> None:
 
     with torch.no_grad():
         pred_scaled = model(x_test_tensor).numpy()
+
     predictions = inverse_transform_features(target_scaler.inverse_transform(pred_scaled))
     actuals = inverse_transform_features(target_scaler.inverse_transform(y_test))
 
     metrics = {
         "training": {
-            "loss": "FixedEnhancedSpikeWeightedLoss",
+            "loss": "StableEnhancedSpikeWeightedLoss",
             "feature_columns": feature_columns,
             "output_features": FEATURES,
             "spike_quantile": args.spike_quantile,
@@ -226,9 +230,8 @@ def main() -> None:
     if data_path.resolve() != raw_copy.resolve():
         shutil.copy2(data_path, raw_copy)
 
-    print("\nFixed Enhanced Model Complete!")
-    print(f"Run folder: {output_dir}")
-    print("Predictions should now be much spikier and more accurate.")
+    print(f"\nStable Enhanced Model Done -> {output_dir}")
+    print("This version should be much better balanced.")
 
 
 if __name__ == "__main__":
