@@ -13,12 +13,14 @@ import pandas as pd
 import torch
 import torch.nn as nn
 from sklearn.metrics import mean_absolute_error, mean_squared_error
-from sklearn.preprocessing import MinMaxScaler
+from sklearn.preprocessing import StandardScaler
 
 from run_layout import artifact_path, ensure_run_layout
 
 
 FEATURES = ["traffic_mbps", "latency_ms", "packet_loss_pct"]
+TIME_FEATURES = ["hour_sin", "hour_cos", "weekday_sin", "weekday_cos"]
+INPUT_FEATURES = FEATURES + TIME_FEATURES
 DEFAULT_MODEL = "lstm_model.pth"
 
 
@@ -66,6 +68,20 @@ def create_sequences(data: np.ndarray, seq_len: int) -> tuple[np.ndarray, np.nda
     return np.asarray(x, dtype=np.float32), np.asarray(y, dtype=np.float32)
 
 
+def add_time_features(df: pd.DataFrame) -> pd.DataFrame:
+    if "timestamp" not in df.columns:
+        return df
+    transformed = df.copy()
+    ts = pd.to_datetime(transformed["timestamp"], errors="coerce")
+    transformed["hour"] = ts.dt.hour
+    transformed["day_of_week"] = ts.dt.dayofweek
+    transformed["hour_sin"] = np.sin(2.0 * np.pi * transformed["hour"] / 24.0)
+    transformed["hour_cos"] = np.cos(2.0 * np.pi * transformed["hour"] / 24.0)
+    transformed["weekday_sin"] = np.sin(2.0 * np.pi * transformed["day_of_week"] / 7.0)
+    transformed["weekday_cos"] = np.cos(2.0 * np.pi * transformed["day_of_week"] / 7.0)
+    return transformed
+
+
 def load_dataset(path: Path) -> pd.DataFrame:
     if not path.exists():
         raise FileNotFoundError(f"{path} not found. Run generate_data.py or collect_telemetry.py first.")
@@ -77,6 +93,7 @@ def load_dataset(path: Path) -> pd.DataFrame:
     if "timestamp" in df.columns:
         df["timestamp"] = pd.to_datetime(df["timestamp"], errors="coerce")
         df = df.dropna(subset=["timestamp"]).sort_values("timestamp").reset_index(drop=True)
+        df = add_time_features(df)
     if len(df) < 30:
         raise ValueError(f"{path} has only {len(df)} usable rows; collect or generate more telemetry.")
     return df
@@ -135,21 +152,38 @@ def main() -> None:
     for idx, feature in enumerate(FEATURES):
         print(f"  {feature:<16} {raw[:, idx].min():8.3f} to {raw[:, idx].max():8.3f}")
 
-    scaler = MinMaxScaler()
-    scaled = scaler.fit_transform(raw)
-    x, y = create_sequences(scaled, args.sequence_length)
+    feature_columns = INPUT_FEATURES if all(name in transformed_df.columns for name in TIME_FEATURES) else FEATURES
+    raw_inputs = transformed_df[feature_columns].to_numpy(dtype=np.float32)
+    raw_targets = transformed_df[FEATURES].to_numpy(dtype=np.float32)
+    x, _ = create_sequences(raw_inputs, args.sequence_length)
+    _, y = create_sequences(raw_targets, args.sequence_length)
     if len(x) < 10:
         raise ValueError("Not enough sequences. Reduce --sequence-length or collect more rows.")
 
     split = max(1, min(len(x) - 1, int(len(x) * args.train_split)))
-    x_train = torch.tensor(x[:split])
-    y_train = torch.tensor(y[:split])
-    x_test = torch.tensor(x[split:])
-    y_test = torch.tensor(y[split:])
+    x_train = x[:split]
+    y_train = y[:split]
+    x_test = x[split:]
+    y_test = y[split:]
     print(f"Training samples: {len(x_train)} | Test samples: {len(x_test)}")
 
-    model = MultivariateTrafficLSTM(len(FEATURES), args.hidden_size, args.layers, len(FEATURES))
-    spike_thresholds = torch.quantile(y_train, args.spike_quantile, dim=0)
+    input_scaler = StandardScaler()
+    target_scaler = StandardScaler()
+    x_train = torch.tensor(
+        input_scaler.fit_transform(x_train.reshape(-1, x_train.shape[-1])).reshape(x_train.shape),
+        dtype=torch.float32,
+    )
+    y_train = torch.tensor(target_scaler.fit_transform(y_train), dtype=torch.float32)
+    x_test = torch.tensor(
+        input_scaler.transform(x_test.reshape(-1, x_test.shape[-1])).reshape(x_test.shape),
+        dtype=torch.float32,
+    )
+    y_test = torch.tensor(target_scaler.transform(y_test), dtype=torch.float32)
+
+    model = MultivariateTrafficLSTM(len(feature_columns), args.hidden_size, args.layers, len(FEATURES))
+    raw_thresholds = np.quantile(raw_targets[:split], args.spike_quantile, axis=0)
+    scaled_spike_thresholds = target_scaler.transform(raw_thresholds.reshape(1, -1))[0]
+    spike_thresholds = torch.tensor(scaled_spike_thresholds, dtype=torch.float32)
     criterion = SpikeWeightedLoss(spike_thresholds, args.spike_weight, args.focal_gamma)
     optimizer = torch.optim.AdamW(model.parameters(), lr=args.lr, weight_decay=1e-4)
     scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, patience=8, factor=0.5)
@@ -208,12 +242,14 @@ def main() -> None:
         pred_scaled = model(x_test).numpy()
         actual_scaled = y_test.numpy()
 
-    predictions = inverse_transform_features(scaler.inverse_transform(pred_scaled))
-    actuals = inverse_transform_features(scaler.inverse_transform(actual_scaled))
+    predictions = inverse_transform_features(target_scaler.inverse_transform(pred_scaled))
+    actuals = inverse_transform_features(target_scaler.inverse_transform(actual_scaled))
 
     metrics = {
         "training": {
             "loss": "SpikeWeightedLoss",
+            "feature_columns": feature_columns,
+            "output_features": FEATURES,
             "spike_quantile": args.spike_quantile,
             "spike_threshold_scaled": spike_thresholds.tolist(),
             "spike_weight": args.spike_weight,
@@ -242,12 +278,18 @@ def main() -> None:
 
     torch.save(model.state_dict(), model_path)
     scaler_params = {
-        "features": FEATURES,
-        "data_min": scaler.data_min_.tolist(),
-        "data_max": scaler.data_max_.tolist(),
-        "data_range": scaler.data_range_.tolist(),
-        "scale": scaler.scale_.tolist(),
-        "min": scaler.min_.tolist(),
+        "feature_columns": feature_columns,
+        "scaler_type": "StandardScaler",
+        "input_scaler": {
+            "mean": input_scaler.mean_.tolist(),
+            "scale": input_scaler.scale_.tolist(),
+            "var": input_scaler.var_.tolist(),
+        },
+        "target_scaler": {
+            "mean": target_scaler.mean_.tolist(),
+            "scale": target_scaler.scale_.tolist(),
+            "var": target_scaler.var_.tolist(),
+        },
     }
     artifact_path(output_dir, "scaler_params.json", "json").write_text(json.dumps(scaler_params, indent=2), encoding="utf-8")
     pd.DataFrame(predictions, columns=FEATURES).to_csv(artifact_path(output_dir, "predictions.csv", "results"), index=False)

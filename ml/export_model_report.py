@@ -193,9 +193,11 @@ def main() -> None:
     training = metrics.get("training", {})
     sequence_length = int(training.get("sequence_length", 48))
     hidden_size = int(training.get("hidden_size", 256))
-    layers = 2
+    layers = int(training.get("layers", 2))
+    feature_columns = list(training.get("feature_columns", FEATURES))
+    input_feature_count = len(feature_columns)
 
-    model = MultivariateTrafficLSTM(len(FEATURES), hidden_size, layers, len(FEATURES))
+    model = MultivariateTrafficLSTM(input_feature_count, hidden_size, layers, len(FEATURES))
     state = torch.load(model_path, map_location="cpu")
     model.load_state_dict(state)
 

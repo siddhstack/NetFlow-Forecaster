@@ -65,6 +65,45 @@ def moving_average_baseline(actuals: np.ndarray, window: int = 5) -> np.ndarray:
     return baseline
 
 
+def clamp_quality(value: float) -> float:
+    return max(0.0, min(1.0, value))
+
+
+def normalized_error_score(mae: float, rmse: float, data_range: float) -> float:
+    normalized_mae = clamp_quality(1.0 - mae / data_range)
+    normalized_rmse = clamp_quality(1.0 - rmse / data_range)
+    return 0.55 * normalized_mae + 0.45 * normalized_rmse
+
+
+def spike_quality(actual_spikes: int, predicted_spikes: int, precision: float, recall: float, f1: float, sample_count: int) -> float:
+    if actual_spikes > 0:
+        return 0.5 * f1 + 0.25 * precision + 0.25 * recall
+    if predicted_spikes == 0:
+        return 1.0
+    false_positive_rate = predicted_spikes / max(sample_count, 1)
+    return clamp_quality(1.0 - false_positive_rate)
+
+
+def enterprise_quality_pct(error_score: float, spike_score: float) -> float:
+    return 100.0 * clamp_quality(0.55 * error_score + 0.45 * spike_score)
+
+
+def compute_feature_quality(metrics: dict[str, float], spike_row: pd.Series | None, sample_count: int) -> float:
+    error_score = normalized_error_score(metrics["mae"], metrics["rmse"], metrics["data_range"])
+    if spike_row is None:
+        spike_score = 0.5
+    else:
+        spike_score = spike_quality(
+            int(spike_row["actual_spikes"]),
+            int(spike_row["predicted_spikes"]),
+            float(spike_row["precision"]),
+            float(spike_row["recall"]),
+            float(spike_row["f1"]),
+            sample_count,
+        )
+    return enterprise_quality_pct(error_score, spike_score)
+
+
 def regression_metrics(actuals: np.ndarray, predictions: np.ndarray) -> dict[str, dict[str, float]]:
     metrics: dict[str, dict[str, float]] = {}
     for idx, feature in enumerate(FEATURES):
@@ -77,14 +116,24 @@ def regression_metrics(actuals: np.ndarray, predictions: np.ndarray) -> dict[str
             "mae": mae,
             "rmse": rmse,
             "r2": float(r2_score(y_true, y_pred)) if len(np.unique(y_true)) > 1 else 0.0,
-            "quality_pct": max(0.0, min(100.0, 100.0 * (1.0 - mae / data_range))),
+            "data_range": data_range,
+            "normalized_mae": clamp_quality(1.0 - mae / data_range),
+            "normalized_rmse": clamp_quality(1.0 - rmse / data_range),
         }
     return metrics
 
 
-def summarize_metrics(model_metrics: dict[str, dict[str, float]], baseline_metrics: dict[str, dict[str, float]]) -> pd.DataFrame:
+def summarize_metrics(
+    model_metrics: dict[str, dict[str, float]],
+    baseline_metrics: dict[str, dict[str, float]],
+    spikes: pd.DataFrame | None = None,
+    sample_count: int = 0,
+) -> pd.DataFrame:
     rows = []
+    spike_index = spikes.set_index("metric") if spikes is not None else None
     for feature in FEATURES:
+        spike_row = spike_index.loc[feature] if spike_index is not None and feature in spike_index.index else None
+        quality_pct = compute_feature_quality(model_metrics[feature], spike_row, sample_count)
         rows.append(
             {
                 "metric": feature,
@@ -97,24 +146,55 @@ def summarize_metrics(model_metrics: dict[str, dict[str, float]], baseline_metri
                 "model_rmse": model_metrics[feature]["rmse"],
                 "baseline_rmse": baseline_metrics[feature]["rmse"],
                 "model_r2": model_metrics[feature]["r2"],
-                "quality_pct": model_metrics[feature]["quality_pct"],
+                "quality_pct": quality_pct,
             }
         )
     return pd.DataFrame(rows)
 
 
-def summarize_baselines(actuals: np.ndarray, predictions: np.ndarray, baselines: dict[str, np.ndarray]) -> pd.DataFrame:
+def summarize_baselines(
+    actuals: np.ndarray,
+    predictions: np.ndarray,
+    baselines: dict[str, np.ndarray],
+    baseline_spikes: dict[str, pd.DataFrame] | None = None,
+) -> pd.DataFrame:
     rows = []
     methods = {"Model": predictions, **baselines}
     for method, values in methods.items():
         method_metrics = regression_metrics(actuals, values)
+        quality_values = []
+        if baseline_spikes is not None and method in baseline_spikes:
+            spike_df = baseline_spikes[method].set_index("metric")
+        else:
+            spike_df = None
+
+        for idx, feature in enumerate(FEATURES):
+            if spike_df is not None and feature in spike_df.index:
+                spike_row = spike_df.loc[feature]
+                spike_score = spike_quality(
+                    int(spike_row["actual_spikes"]),
+                    int(spike_row["predicted_spikes"]),
+                    float(spike_row["precision"]),
+                    float(spike_row["recall"]),
+                    float(spike_row["f1"]),
+                    len(actuals),
+                )
+            else:
+                spike_score = 0.5
+            error_score = normalized_error_score(
+                method_metrics[feature]["mae"],
+                method_metrics[feature]["rmse"],
+                method_metrics[feature]["data_range"],
+            )
+            quality_values.append(enterprise_quality_pct(error_score, spike_score))
+
         rows.append(
             {
                 "method": method,
                 "mae": float(np.mean([method_metrics[feature]["mae"] for feature in FEATURES])),
                 "rmse": float(np.mean([method_metrics[feature]["rmse"] for feature in FEATURES])),
                 "r2": float(np.mean([method_metrics[feature]["r2"] for feature in FEATURES])),
-                "quality_pct": float(np.mean([method_metrics[feature]["quality_pct"] for feature in FEATURES])),
+                "quality_pct": float(np.mean(quality_values)),
             }
         )
     return pd.DataFrame(rows)
@@ -200,12 +280,13 @@ def benchmark_model(run_dir: Path, metrics_json: dict, test_rows: int, repeats: 
     sequence_length = int(training.get("sequence_length", 48))
     hidden_size = int(training.get("hidden_size", 256))
     layers = int(training.get("layers", 2))
-    model = MultivariateTrafficLSTM(len(FEATURES), hidden_size, layers, len(FEATURES))
+    input_feature_count = int(len(training.get("feature_columns", FEATURES)))
+    model = MultivariateTrafficLSTM(input_feature_count, hidden_size, layers, len(FEATURES))
     model.load_state_dict(torch.load(model_path, map_location="cpu"))
     model.eval()
 
     batch_size = max(1, min(128, test_rows))
-    sample = torch.rand(batch_size, sequence_length, len(FEATURES))
+    sample = torch.rand(batch_size, sequence_length, input_feature_count)
     with torch.no_grad():
         for _ in range(5):
             model(sample)
@@ -281,15 +362,21 @@ def main() -> None:
     metrics_json = json.loads(find_artifact(run_dir, "metrics.json", "json").read_text(encoding="utf-8"))
 
     baseline = persistence_baseline(actuals)
+    moving_avg = moving_average_baseline(actuals, window=5)
     baselines = {
         "Persistence": baseline,
-        "Moving Average": moving_average_baseline(actuals, window=5),
+        "Moving Average": moving_avg,
     }
     model_metrics = regression_metrics(actuals, predictions)
     baseline_metrics = regression_metrics(actuals, baseline)
-    comparison = summarize_metrics(model_metrics, baseline_metrics)
-    baseline_comparison = summarize_baselines(actuals, predictions, baselines)
     spikes = spike_analysis(actuals, predictions, telemetry, metrics_json)
+    baseline_spikes = {
+        "Model": spikes,
+        "Persistence": spike_analysis(actuals, baseline, telemetry, metrics_json),
+        "Moving Average": spike_analysis(actuals, moving_avg, telemetry, metrics_json),
+    }
+    comparison = summarize_metrics(model_metrics, baseline_metrics, spikes, len(actuals))
+    baseline_comparison = summarize_baselines(actuals, predictions, baselines, baseline_spikes)
     benchmark = benchmark_model(run_dir, metrics_json, len(actuals), args.benchmark_repeats)
     model_metadata = {
         "file": benchmark.get("artifact", "missing"),

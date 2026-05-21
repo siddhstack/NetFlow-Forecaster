@@ -56,9 +56,21 @@ def add_features(df: pd.DataFrame, lookback: int) -> tuple[pd.DataFrame, list[st
     feature_cols: list[str] = []
 
     if "timestamp" in base.columns:
-        ts = pd.to_datetime(base["timestamp"])
-        frames.append(pd.DataFrame({"hour": ts.dt.hour, "day_of_week": ts.dt.dayofweek}))
-        feature_cols.extend(["hour", "day_of_week"])
+        ts = pd.to_datetime(base["timestamp"], errors="coerce")
+        hour = ts.dt.hour.fillna(0).astype(int)
+        day_of_week = ts.dt.dayofweek.fillna(0).astype(int)
+        frames.append(
+            pd.DataFrame(
+                {
+                    "hour_sin": np.sin(2.0 * np.pi * hour / 24.0),
+                    "hour_cos": np.cos(2.0 * np.pi * hour / 24.0),
+                    "weekday_sin": np.sin(2.0 * np.pi * day_of_week / 7.0),
+                    "weekday_cos": np.cos(2.0 * np.pi * day_of_week / 7.0),
+                    "is_weekend": (day_of_week >= 5).astype(float),
+                }
+            )
+        )
+        feature_cols.extend(["hour_sin", "hour_cos", "weekday_sin", "weekday_cos", "is_weekend"])
 
     for feature in FEATURES:
         feature_data: dict[str, pd.Series] = {}
