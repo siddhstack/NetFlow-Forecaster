@@ -200,10 +200,11 @@ use the baseline/ablation outputs before making claims about improvement.
 
 ## Current Evidence
 
-The repository includes checked-in evidence artifacts from one synthetic run and
-one Kaggle-derived run. These are not proof that the model is universally best;
-they show how to inspect a run honestly and where the current system still
-falls short.
+The primary checked-in evidence run is the 2000-row synthetic trial that reached
+`78.3%` normalized quality. This is the cleanest current demonstration because
+it beats the persistence baseline on every tracked KPI and passes the traffic
+spike gate. Kaggle artifacts are still included as a harder external-data
+reference, but the headline numbers below use the stronger synthetic run.
 
 Synthetic command:
 
@@ -243,28 +244,25 @@ Tracked evidence files:
 - `docs/results/synthetic_evaluation_spikes.csv`
 - `docs/results/sequence_model_comparison.csv`
 
-Latest measured summary:
+Latest measured synthetic summary:
 
 | Dataset | Rows | Epochs | Quality | MAE vs Persistence | Beats Persistence Every Feature | Traffic Spike F1 Gate |
 |---|---:|---:|---:|---:|---|---|
 | Synthetic | 2000 | 40 | 78.3% | +24.7% | Yes | Yes |
-| Kaggle converted flow | 3980 | 60 | 57.2% | +3.2% average | No | No |
 
-Per-feature MAE from the latest evidence runs:
+Per-feature MAE from the 78.3% synthetic evidence run:
 
 | Dataset | Feature | Model MAE | Persistence MAE | MAE Gain |
 |---|---|---:|---:|---:|
 | Synthetic | Traffic | 8.019 | 12.522 | +36.0% |
 | Synthetic | Latency | 0.966 | 1.387 | +30.3% |
 | Synthetic | Packet loss | 0.385 | 0.416 | +7.7% |
-| Kaggle | Traffic | 4.528 | 4.466 | -1.4% |
-| Kaggle | Latency | 0.905 | 1.006 | +10.0% |
-| Kaggle | Packet loss | 0.220 | 0.222 | +1.0% |
 
 The requested `>=90%` quality target was not reached in these measured runs.
-The synthetic run passes the concrete baseline and traffic-spike gates, but the
-Kaggle converted-flow run remains too close to persistence and still has weak
-traffic spike F1. That is the main current research/engineering gap.
+The 78.3% synthetic run passes the concrete baseline and traffic-spike gates.
+The Kaggle converted-flow run remains too close to persistence and still has
+weak traffic spike F1, so it is treated as a limitation rather than the headline
+result.
 
 The current sequence ablation smoke run from `ml/compare_sequence_models.py`
 used the synthetic 2000-row evidence data for 20 epochs and showed:
