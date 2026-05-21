@@ -1,9 +1,9 @@
-# NetPulse
+# NetFlow-Forecaster
 
 AI-powered network telemetry forecasting for traffic, latency, and packet loss.
 
-NetPulse turns telemetry CSVs, synthetic trials, Kaggle flow data, and live
-ContainerLab samples into reproducible forecasting runs with dashboards,
+NetFlow-Forecaster turns telemetry CSVs, synthetic trials, Kaggle flow data, and
+live ContainerLab samples into reproducible forecasting runs with dashboards,
 baseline comparisons, spike metrics, and model artifacts.
 
 ## Highlights
@@ -99,7 +99,7 @@ evaluation layer checks whether the result actually beats simple baselines.
 PowerShell:
 
 ```powershell
-cd "C:\Users\siddh\Downloads\ai_network_project (1)\ai_network_project"
+cd "C:\path\to\NetFlow-Forecaster"
 Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
 python -m pip install -r requirements.txt
 ```
@@ -107,7 +107,7 @@ python -m pip install -r requirements.txt
 Bash:
 
 ```bash
-cd AI-Model-for-Network-Traffic-main
+cd NetFlow-Forecaster
 python -m pip install -r requirements.txt
 ```
 

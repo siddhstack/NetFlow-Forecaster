@@ -1,8 +1,8 @@
 # Contributing
 
-Thanks for improving NetPulse. This project is an applied ML and networking
-toolkit, so useful contributions should preserve reproducibility, chronological
-time-series evaluation, and clear evidence.
+Thanks for improving NetFlow-Forecaster. This project is an applied ML and
+networking toolkit, so useful contributions should preserve reproducibility,
+chronological time-series evaluation, and clear evidence.
 
 ## Development Setup
 

@@ -1,6 +1,6 @@
 # Support
 
-For help using NetPulse:
+For help using NetFlow-Forecaster:
 
 1. Check the README quick start and troubleshooting sections.
 2. Search existing GitHub issues.
