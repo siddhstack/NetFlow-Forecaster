@@ -1,0 +1,46 @@
+{
+  "overall": {
+    "normalized_quality_pct": 52.82517269613492,
+    "mae_improvement_vs_persistence_pct": 10.060530638832534,
+    "final_training_loss": 0.981434930667833,
+    "epochs": 34,
+    "rows": 5000,
+    "test_samples": 883
+  },
+  "benchmark": {
+    "latency_ms": 40.95458125011646,
+    "throughput_samples_sec": 3125.413472507084,
+    "model_size_mb": 0.8425798416137695,
+    "device": "cpu",
+    "parameters": 219268,
+    "artifact": "lstm_model.pth"
+  },
+  "baseline_comparison": [
+    {
+      "method": "Model",
+      "mae": 0.6042593433979748,
+      "rmse": 2.2537819340849983,
+      "r2": -0.0009648670096747969,
+      "quality_pct": 52.82517269613492
+    },
+    {
+      "method": "Persistence",
+      "mae": 0.6871683654209136,
+      "rmse": 3.110937694887611,
+      "r2": -0.8932737481981955,
+      "quality_pct": 55.41472246618448
+    },
+    {
+      "method": "Moving Average",
+      "mae": 0.6526282307789103,
+      "rmse": 2.462842832171311,
+      "r2": -0.19249429506293594,
+      "quality_pct": 53.596842275778954
+    }
+  ],
+  "notes": {
+    "baseline": "Persistence baseline: predicts the previous actual sample.",
+    "human_evaluation": "Not performed. Add operator review labels for true human evaluation.",
+    "cost_efficiency": "Estimated from CPU throughput per model size."
+  }
+}

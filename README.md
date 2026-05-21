@@ -192,6 +192,53 @@ Inspect these outputs:
 Do not treat one trial as proof of model superiority. Compare multiple runs and
 use the baseline/ablation outputs before making claims about improvement.
 
+## Example Evidence From A Kaggle Run
+
+The repository includes a small set of checked-in evidence artifacts from a
+5000-row Kaggle run. These are not meant to prove that the model is universally
+best; they show how to inspect a run honestly.
+
+Data and command:
+
+```powershell
+.\run.ps1 kaggle -Samples 5000 -Epochs 60
+```
+
+Dashboard examples:
+
+![Kaggle traffic prediction dashboard](docs/images/kaggle_traffic_prediction_dashboard.png)
+
+![Kaggle model evaluation dashboard](docs/images/kaggle_model_evaluation_dashboard.png)
+
+Tracked evidence files:
+
+- `docs/results/kaggle_evaluation_summary.json`
+- `docs/results/kaggle_evaluation_baselines.csv`
+- `docs/results/kaggle_evaluation_spikes.csv`
+- `docs/results/sequence_model_comparison.csv`
+
+What this run showed:
+
+- Overall normalized quality: about `52.8%`.
+- MAE improved over persistence by about `10.1%`.
+- The model did not detect spikes on this Kaggle slice, so spike detection
+  remains an open weakness.
+- Persistence still had a higher combined quality score in this evaluation,
+  which is a useful warning that one aggregate score can conflict with MAE.
+
+The sequence ablation table from `ml/compare_sequence_models.py` showed:
+
+| Model | Validation MSE | Test MAE | SMAPE | Spike F1 |
+|---|---:|---:|---:|---:|
+| Attention LSTM | 0.6443 | 3.1301 | 0.4424 | 0.2745 |
+| LSTM | 0.6452 | 2.9573 | 0.4298 | 0.2601 |
+| GRU | 0.6453 | 3.1468 | 0.4395 | 0.2623 |
+| Mean LSTM | 0.6528 | 3.0840 | 0.4462 | 0.2652 |
+
+This is why the project includes ablation tooling: attention had the best
+validation MSE in this run, but the plain LSTM had the best test MAE. That is a
+more credible story than claiming one architecture is always better.
+
 Every run creates a timestamped folder under `runs/`, for example:
 
 ```text

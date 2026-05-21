@@ -1,0 +1,4 @@
+metric,threshold,actual_spikes,predicted_spikes,precision,recall,f1,threshold_source
+traffic_mbps,18.981677552330304,21,0,0.0,0.0,0.0,training_window
+latency_ms,2.8981815673127524,21,0,0.0,0.0,0.0,training_window
+packet_loss_pct,0.22728150078885345,67,0,0.0,0.0,0.0,training_window
