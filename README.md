@@ -21,18 +21,18 @@ metrics, and model artifacts.
 
 ## Current Evidence
 
-The strongest checked-in evidence is a 2000-row synthetic benchmark from the V4
-self-learning loop. It is useful as a reproducible demo, not as a claim of
-production readiness.
+The checked-in evidence includes synthetic, local CSV, and larger external CSV
+trials. These are useful reproducible demos, not claims of production readiness.
 
 | Dataset | Rows | Quality | MAE vs Persistence | Traffic Spike F1 | Status |
 |---|---:|---:|---:|---:|---|
 | Synthetic | 2000 | 83.6% | +25.2% | 0.851 | Best checked-in demo |
 | Generic `ml/telemetry.csv` | 3000 | 81.2% | +18.4% | 0.810 | Local CSV demo |
+| External NetFlow CSV | 120000 | 73.0% | +34.7% | 0.887 | Large CSV trial |
 
 The requested `>=90%` quality gate was not reached by these measured evidence
-runs. The synthetic and generic demos do beat persistence on every tracked MAE
-target and pass the traffic spike F1 gate.
+runs. The synthetic, generic, and external CSV demos do beat persistence on
+every tracked MAE target and pass the traffic spike F1 gate.
 
 Dashboard examples:
 
@@ -44,6 +44,10 @@ Dashboard examples:
 
 ![Generic telemetry model evaluation dashboard](docs/images/generic_model_evaluation_dashboard.png)
 
+![External CSV traffic prediction dashboard](docs/images/external_csv_traffic_prediction_dashboard.png)
+
+![External CSV model evaluation dashboard](docs/images/external_csv_model_evaluation_dashboard.png)
+
 Tracked evidence files:
 
 - `docs/results/synthetic_evaluation_summary.json`
@@ -52,6 +56,10 @@ Tracked evidence files:
 - `docs/results/generic_evaluation_summary.json`
 - `docs/results/generic_evaluation_baselines.csv`
 - `docs/results/generic_evaluation_spikes.csv`
+- `docs/results/external_csv_evaluation_summary.json`
+- `docs/results/external_csv_evaluation_baselines.csv`
+- `docs/results/external_csv_evaluation_comparison.csv`
+- `docs/results/external_csv_evaluation_spikes.csv`
 - `docs/results/sequence_model_comparison.csv`
 
 ## How It Works

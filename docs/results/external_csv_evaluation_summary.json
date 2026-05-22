@@ -1,0 +1,90 @@
+{
+  "overall": {
+    "normalized_quality_pct": 73.0251669466316,
+    "mae_improvement_vs_persistence_pct": 34.669968477740646,
+    "final_training_loss": 0.7333352206466134,
+    "epochs": 1,
+    "rows": 120000,
+    "test_samples": 23991
+  },
+  "per_feature": [
+    {
+      "metric": "traffic_mbps",
+      "unit": "Mbps",
+      "model_mae": 13.926434552538387,
+      "baseline_mae": 23.384315451627693,
+      "mae_improvement_pct": 40.445404179795986,
+      "model_rmse": 35.02929042010179,
+      "baseline_rmse": 51.58209559957715,
+      "model_r2": 0.7642213546631815,
+      "quality_pct": 92.93568534950303
+    },
+    {
+      "metric": "latency_ms",
+      "unit": "ms",
+      "model_mae": 0.8550164664232514,
+      "baseline_mae": 1.296290942436747,
+      "mae_improvement_pct": 34.041314458619524,
+      "model_rmse": 2.4470798612914617,
+      "baseline_rmse": 3.451060249761582,
+      "model_r2": 0.03935386419690934,
+      "quality_pct": 53.01002452353123
+    },
+    {
+      "metric": "packet_loss_pct",
+      "unit": "%",
+      "model_mae": 0.07740831104181208,
+      "baseline_mae": 0.10983514651327582,
+      "mae_improvement_pct": 29.52318679480643,
+      "model_rmse": 0.33184517173978795,
+      "baseline_rmse": 0.46875598416421166,
+      "model_r2": -0.003580880799930908,
+      "quality_pct": 53.21927256398911
+    }
+  ],
+  "gates_passed": {
+    "quality_ge_90": false,
+    "mae_improvement_ge_15": true,
+    "beats_persistence_each_feature_mae": true,
+    "traffic_spike_f1_ge_0_50": true,
+    "traffic_predicted_spikes_ge_5": true,
+    "model_quality_gt_persistence": true
+  },
+  "benchmark": {
+    "latency_ms": 130.52292374995886,
+    "throughput_samples_sec": 980.6706463701962,
+    "model_size_mb": 22.767802238464355,
+    "device": "cpu-sklearn",
+    "parameters": 540,
+    "artifact": "dataset_model.joblib"
+  },
+  "baseline_comparison": [
+    {
+      "method": "Model",
+      "mae": 4.95295311000115,
+      "rmse": 12.60273848437768,
+      "r2": 0.26666477935338667,
+      "quality_pct": 73.0251669466316
+    },
+    {
+      "method": "Persistence",
+      "mae": 8.263480513525906,
+      "rmse": 18.500637277834315,
+      "r2": -0.47479330905896955,
+      "quality_pct": 70.57845083505755
+    },
+    {
+      "method": "Moving Average",
+      "mae": 14.078013586113313,
+      "rmse": 20.469357968200057,
+      "r2": -0.005823905511843382,
+      "quality_pct": 65.20344325829167
+    }
+  ],
+  "notes": {
+    "baseline": "Persistence baseline: predicts the previous actual sample.",
+    "human_evaluation": "Not performed. Add operator review labels for true human evaluation.",
+    "cost_efficiency": "Estimated from CPU throughput per model size.",
+    "spike_eval_adjusted": false
+  }
+}
