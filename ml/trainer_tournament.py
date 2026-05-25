@@ -33,7 +33,18 @@ def candidates_for_profile(profile: TelemetryProfile) -> list[Candidate]:
         Candidate("hybrid_short_seq", "enhanced", ["--epochs", epochs, "--sequence-length", "48", "--spike-quantile", q]),
         Candidate("hybrid_gb_heavy", "enhanced", ["--epochs", epochs, "--sequence-length", seq, "--gb-weight", "0.85", "--lstm-weight", "0.15"]),
         Candidate("gb_spike_deep", "gb", ["--lookback", "36", "--spike-oversample", "6"]),
-        Candidate("hybrid_low_quantile", "enhanced", ["--epochs", str(profile.recommended_epochs + 20), "--sequence-length", seq, "--spike-quantile", "0.82", "--spike-weight", "10"]),
+        Candidate(
+            "hybrid_low_quantile",
+            "enhanced",
+            [
+                "--epochs", str(profile.recommended_epochs + 20),
+                "--sequence-length", seq,
+                "--spike-quantile", "0.82",
+                "--spike-weight", "10",
+                "--spike-lift-near", "1.0,0.9,0.95",
+                "--spike-lift-factors", "1.05,1.01,1.05",
+            ],
+        ),
         # R2 recovery candidate: short lookback (24h) forces the model to learn
         # from recent spike context rather than long-range daily patterns.
         # Combined with high spike_weight=8.0 this specifically targets the

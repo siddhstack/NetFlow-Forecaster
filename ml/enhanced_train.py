@@ -102,6 +102,16 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--export-onnx", action=argparse.BooleanOptionalAction, default=False, help="Export the LSTM component to ONNX.")
     parser.add_argument("--calibrate", action=argparse.BooleanOptionalAction, default=True, help="Apply validation-only prediction calibration.")
     parser.add_argument("--predict-traffic-delta", action="store_true", help="Compatibility flag for candidate search; traffic remains level-predicted in this trainer.")
+    parser.add_argument(
+        "--spike-lift-near",
+        default="",
+        help="Optional comma-separated near-threshold factors for post-calibration spike lift.",
+    )
+    parser.add_argument(
+        "--spike-lift-factors",
+        default="",
+        help="Optional comma-separated lift factors for post-calibration spike lift.",
+    )
     parser.add_argument("--output", default="lstm_model.pth")
     parser.add_argument("--output-dir", default="runs/hybrid_best")
     return parser.parse_args()
@@ -119,6 +129,31 @@ def parse_feature_spike_multipliers(value: str) -> torch.Tensor:
             f"--feature-spike-multipliers expects {len(FEATURES)} values, got {len(parts)}"
         )
     return torch.tensor(parts, dtype=torch.float32)
+
+
+def parse_optional_feature_values(value: str) -> list[float] | None:
+    if not value:
+        return None
+    parts = [float(part.strip()) for part in value.split(",") if part.strip()]
+    if len(parts) != len(FEATURES):
+        raise ValueError(f"Expected {len(FEATURES)} comma-separated values, got {len(parts)}")
+    return parts
+
+
+def apply_spike_lift(
+    predictions: np.ndarray,
+    thresholds: dict[str, float],
+    near_factors: list[float] | None,
+    lift_factors: list[float] | None,
+) -> np.ndarray:
+    if near_factors is None or lift_factors is None:
+        return predictions
+    lifted = predictions.copy()
+    for idx, feature in enumerate(FEATURES):
+        threshold = float(thresholds[feature])
+        near = lifted[:, idx] > threshold * near_factors[idx]
+        lifted[near, idx] = np.maximum(lifted[near, idx], threshold * lift_factors[idx])
+    return lifted
 
 
 def original_index_for_sequence(sequence_idx: int, sequence_length: int) -> int:
@@ -387,6 +422,12 @@ def main() -> None:
     final_pred = persistence_weight.reshape(1, -1) * test_persistence + (1.0 - persistence_weight.reshape(1, -1)) * final_pred
     if calibration_params is not None:
         final_pred = apply_calibration(final_pred, calibration_params, test_persistence)
+    final_pred = apply_spike_lift(
+        final_pred,
+        raw_spike_thresholds,
+        parse_optional_feature_values(args.spike_lift_near),
+        parse_optional_feature_values(args.spike_lift_factors),
+    )
     final_pred = np.clip(final_pred, 0.0, None)
     residuals = actuals - final_pred
     residual_std = np.std(residuals, axis=0, ddof=0)
@@ -453,6 +494,8 @@ def main() -> None:
             "spike_weight": args.spike_weight,
             "focal_gamma": args.focal_gamma,
             "spike_thresholds": raw_spike_thresholds,
+            "spike_lift_near": args.spike_lift_near,
+            "spike_lift_factors": args.spike_lift_factors,
             "gb_weight": {feature: float(gb_weight[idx]) for idx, feature in enumerate(FEATURES)},
             "lstm_weight": {feature: float(lstm_weight[idx]) for idx, feature in enumerate(FEATURES)},
             "persistence_residual_weight": {feature: float(persistence_weight[idx]) for idx, feature in enumerate(FEATURES)},

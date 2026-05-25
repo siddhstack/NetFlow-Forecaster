@@ -1,7 +1,7 @@
 {
   "overall": {
-    "normalized_quality_pct": 81.16970990643142,
-    "mae_improvement_vs_persistence_pct": 18.431813172604713,
+    "normalized_quality_pct": 81.7664822083443,
+    "mae_improvement_vs_persistence_pct": 18.307614821535246,
     "final_training_loss": 11.548167385160925,
     "epochs": 52,
     "rows": 3000,
@@ -11,35 +11,35 @@
     {
       "metric": "traffic_mbps",
       "unit": "Mbps",
-      "model_mae": 8.310590961662156,
+      "model_mae": 8.316705614324865,
       "baseline_mae": 12.340217973231358,
-      "mae_improvement_pct": 32.654423287419625,
-      "model_rmse": 15.95001791896775,
+      "mae_improvement_pct": 32.60487268243052,
+      "model_rmse": 15.943654536372271,
       "baseline_rmse": 22.694507529019077,
-      "model_r2": 0.7482116233438587,
-      "quality_pct": 86.89739551002185
+      "model_r2": 0.7484124890948234,
+      "quality_pct": 86.89720101526525
     },
     {
       "metric": "latency_ms",
       "unit": "ms",
-      "model_mae": 1.1414549760954542,
+      "model_mae": 1.1572113150463552,
       "baseline_mae": 1.2752409177820268,
-      "mae_improvement_pct": 10.491032699865125,
-      "model_rmse": 2.1542108403055464,
+      "mae_improvement_pct": 9.255474874579424,
+      "model_rmse": 2.1591107789173023,
       "baseline_rmse": 2.563187056613171,
-      "model_r2": -0.18413015613692485,
-      "quality_pct": 74.46972413301182
+      "model_r2": -0.18952309514503707,
+      "quality_pct": 75.67286058858696
     },
     {
       "metric": "packet_loss_pct",
       "unit": "%",
-      "model_mae": 0.3260562599793858,
+      "model_mae": 0.32266945698418287,
       "baseline_mae": 0.371151051625239,
-      "mae_improvement_pct": 12.14998353052939,
-      "model_rmse": 0.7623269276444399,
+      "mae_improvement_pct": 13.062496907595795,
+      "model_rmse": 0.7642448628214971,
       "baseline_rmse": 0.8711748775670791,
-      "model_r2": -0.30249560174346746,
-      "quality_pct": 76.41432447267019
+      "model_r2": -0.30905773282994864,
+      "quality_pct": 77.59866621425975
     }
   ],
   "gates_passed": {
@@ -51,8 +51,8 @@
     "model_quality_gt_persistence": true
   },
   "benchmark": {
-    "latency_ms": 54.09047375032969,
-    "throughput_samples_sec": 2366.4056001953545,
+    "latency_ms": 28.648105000320356,
+    "throughput_samples_sec": 4468.009315051332,
     "model_size_mb": 0.9084978103637695,
     "device": "cpu",
     "parameters": 235794,
@@ -61,10 +61,10 @@
   "baseline_comparison": [
     {
       "method": "Model",
-      "mae": 3.259367399245665,
-      "rmse": 6.2888518956392465,
-      "r2": 0.08719528848782214,
-      "quality_pct": 81.16970990643142
+      "mae": 3.2655287954518015,
+      "rmse": 6.28900339270369,
+      "r2": 0.08327722037327923,
+      "quality_pct": 81.7664822083443
     },
     {
       "method": "Persistence",
