@@ -9,6 +9,7 @@ import numpy as np
 import pandas as pd
 import pytest
 import torch
+import joblib
 from sklearn.preprocessing import StandardScaler
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -97,3 +98,42 @@ def test_predict_raises_on_too_few_rows(tmp_path):
     df.to_csv(short_path, index=False)
     with pytest.raises(ValueError, match="usable rows"):
         forecast(run_dir, short_path, forecast_steps=2)
+
+
+def test_predict_supports_dataset_model_only(tmp_path):
+    from sklearn.linear_model import LinearRegression
+    from sklearn.multioutput import MultiOutputRegressor
+
+    df = generate_traffic_data(hours=140, seed=7, output=tmp_path / "input.csv")
+    df["timestamp"] = pd.to_datetime(df["timestamp"])
+    input_path = tmp_path / "input.csv"
+    df.to_csv(input_path, index=False)
+
+    # Build dataset-model payload similar to train_kaggle_model.py output.
+    from train_kaggle_model import add_features
+
+    lookback = 8
+    modeled, feature_cols = add_features(df, lookback)
+    x = modeled[feature_cols].to_numpy(dtype=float)
+    y = modeled[FEATURES].to_numpy(dtype=float)
+    scaler = StandardScaler().fit(x)
+    model = MultiOutputRegressor(LinearRegression()).fit(scaler.transform(x), y)
+
+    run_dir = tmp_path / "run_ds"
+    (run_dir / "model").mkdir(parents=True, exist_ok=True)
+    (run_dir / "json").mkdir(parents=True, exist_ok=True)
+    joblib.dump(
+        {
+            "model": model,
+            "scaler": scaler,
+            "feature_columns": feature_cols,
+            "target_features": FEATURES,
+            "training": {"lookback": lookback},
+        },
+        run_dir / "model" / "dataset_model.joblib",
+    )
+
+    result = forecast(run_dir, input_path, forecast_steps=6)
+    assert len(result) == 6
+    assert "traffic_mbps_lower_95" in result.columns
+    assert "packet_loss_pct_upper_95" in result.columns

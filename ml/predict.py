@@ -95,6 +95,85 @@ def _load_gb(run_dir: Path) -> dict | None:
     return joblib.load(gb_path)
 
 
+def _load_dataset_model(run_dir: Path) -> dict | None:
+    path = run_dir / "model" / "dataset_model.joblib"
+    if not path.exists():
+        return None
+    return joblib.load(path)
+
+
+def _forecast_with_dataset_model(run_dir: Path, data: pd.DataFrame | Path, forecast_steps: int) -> pd.DataFrame:
+    bundle = _load_dataset_model(run_dir)
+    if bundle is None:
+        raise FileNotFoundError(
+            f"No hybrid artifacts found (missing json/scaler_params.json) and no dataset model found at {run_dir / 'model' / 'dataset_model.joblib'}."
+        )
+    model = bundle["model"]
+    scaler = bundle["scaler"]
+    feature_columns = list(bundle.get("feature_columns") or [])
+    lookback = int(bundle.get("training", {}).get("lookback", 24))
+    if not feature_columns:
+        raise ValueError("dataset_model.joblib is missing feature_columns")
+
+    if isinstance(data, (str, Path)):
+        # Use raw CSV here (not train_model.load_dataset) to avoid double-adding
+        # time-feature columns that train_kaggle_model.add_features also creates.
+        df = pd.read_csv(Path(data))
+    else:
+        df = data.copy()
+    if "timestamp" in df.columns:
+        df["timestamp"] = pd.to_datetime(df["timestamp"], errors="coerce")
+        df = df.dropna(subset=["timestamp"]).sort_values("timestamp").reset_index(drop=True)
+    df = df.dropna(subset=FEATURES).reset_index(drop=True)
+
+    df = df.reset_index(drop=True)
+    if "timestamp" in df.columns:
+        last_timestamp = pd.to_datetime(df["timestamp"].iloc[-1])
+        freq = pd.infer_freq(pd.to_datetime(df["timestamp"]))
+        freq = freq or "h"
+    else:
+        last_timestamp = None
+        freq = "h"
+
+    preds: list[np.ndarray] = []
+    for step in range(forecast_steps):
+        if len(df) < lookback + 1:
+            raise ValueError(f"Need at least {lookback + 1} rows for dataset-model inference. Got {len(df)}.")
+        feature_frame, derived_cols = add_features(df.iloc[-(lookback + 1) :].reset_index(drop=True), lookback)
+        cols = feature_columns or derived_cols
+        if hasattr(scaler, "n_features_in_") and len(cols) != int(scaler.n_features_in_):
+            # Fall back to derived cols if a saved bundle is inconsistent.
+            cols = derived_cols
+        x = feature_frame[cols].to_numpy(dtype=float)
+        x_scaled = scaler.transform(x)
+        y_hat = np.clip(model.predict(x_scaled)[0], 0.0, None)
+        preds.append(y_hat.astype(float))
+
+        next_row = df.iloc[-1].copy()
+        for idx, feature in enumerate(FEATURES):
+            next_row[feature] = float(y_hat[idx])
+        if last_timestamp is not None:
+            next_row["timestamp"] = last_timestamp + pd.to_timedelta(step + 1, unit="h")
+        df = pd.concat([df, pd.DataFrame([next_row])], ignore_index=True)
+
+    pred_array = np.vstack(preds)
+    residual_std = np.abs(pred_array).mean(axis=0) * 0.10
+    lower_95 = np.clip(pred_array - 1.96 * residual_std.reshape(1, -1), 0.0, None)
+    upper_95 = pred_array + 1.96 * residual_std.reshape(1, -1)
+
+    if last_timestamp is not None:
+        future_ts = pd.date_range(start=last_timestamp + pd.to_timedelta(1, unit="h"), periods=forecast_steps, freq=freq)
+    else:
+        future_ts = pd.RangeIndex(forecast_steps)
+
+    result = pd.DataFrame(pred_array, columns=FEATURES)
+    result.insert(0, "timestamp", future_ts)
+    for idx, feature in enumerate(FEATURES):
+        result[f"{feature}_lower_95"] = lower_95[:, idx]
+        result[f"{feature}_upper_95"] = upper_95[:, idx]
+    return result
+
+
 def _build_gb_features(
     data: pd.DataFrame,
     bundle: dict,
@@ -143,7 +222,11 @@ def _build_gb_features(
 
 
 def forecast(run_dir: Path, data: pd.DataFrame | Path, forecast_steps: int = 1) -> pd.DataFrame:
-    scaler_params = _load_scaler_params(run_dir)
+    try:
+        scaler_params = _load_scaler_params(run_dir)
+    except FileNotFoundError:
+        # Auto-benchmark can select gb-only runs which do not produce scaler_params.json.
+        return _forecast_with_dataset_model(run_dir, data, forecast_steps)
     feature_cols = scaler_params.get("feature_columns", INPUT_FEATURES)
     hidden_size = DEFAULT_HIDDEN_SIZE
     layers = DEFAULT_LAYERS

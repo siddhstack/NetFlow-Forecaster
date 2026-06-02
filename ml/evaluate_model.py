@@ -412,7 +412,12 @@ def main() -> None:
     args = parse_args()
     run_dir = Path(args.run_dir)
     ensure_run_layout(run_dir)
-    telemetry = load_required_csv(find_artifact(run_dir, "telemetry.csv", "raw_data"))
+    telemetry_path = find_artifact(run_dir, "telemetry.csv", "raw_data")
+    if not telemetry_path.exists():
+        raw_csvs = sorted((run_dir / "raw_data").glob("*.csv"))
+        if len(raw_csvs) == 1:
+            telemetry_path = raw_csvs[0]
+    telemetry = load_required_csv(telemetry_path)
     actuals = load_required_csv(find_artifact(run_dir, "actuals.csv", "results"))[FEATURES].to_numpy(dtype=float)
     predictions = load_required_csv(find_artifact(run_dir, "predictions.csv", "results"))[FEATURES].to_numpy(dtype=float)
     losses = load_required_csv(find_artifact(run_dir, "train_losses.csv", "results"))

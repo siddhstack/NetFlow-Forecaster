@@ -12,6 +12,7 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 
 from metrics_utils import diagnose_quality_shortfall
+from run_layout import find_artifact
 from telemetry_profile import profile_telemetry
 from trainer_tournament import Candidate, next_candidate
 
@@ -55,7 +56,7 @@ def train_candidate(candidate: Candidate, data: Path, run_dir: Path) -> None:
             *candidate.args,
         ]
     run_cmd(cmd)
-    raw = run_dir / "raw_data" / "telemetry.csv"
+    raw = find_artifact(run_dir, data.name, "raw_data")
     run_cmd([sys.executable, str(ML / "visualize.py"), "--data", str(raw), "--output-dir", str(run_dir), "--sensitivity", "1.3"])
     run_cmd([sys.executable, str(ML / "evaluate_model.py"), "--run-dir", str(run_dir)])
 
