@@ -1,3 +1,25 @@
+NetFlow-Forecaster is a non-technical, operational demo of how network telemetry can be turned into practical next-step forecasts for traffic, latency, and packet loss. It is intended to help network teams understand whether machine learning can reliably anticipate short-term network behavior and whether those predictions are better than simple fallback methods.
+
+Initial requirement diagram:
+
+```text
+Telemetry input (CSV / NetFlow / live capture)
+               |
+               v
+      Feature preparation + chronological split
+               |
+               v
+    Forecast models:
+      - LSTM sequence model
+      - Gradient Boosting with lag/rolling features
+               |
+               v
+        Forecast outputs + spike detection
+               |
+               v
+      Evaluation, dashboards, and reports
+```
+
 # NetFlow-Forecaster
 
 Applied network telemetry forecasting for traffic, latency, and packet loss.
