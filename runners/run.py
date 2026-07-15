@@ -20,6 +20,7 @@ MODES = (
     "kaggle",
     "kaggle_opt",
     "dataset_opt",
+    "public_benchmark",
     "simulate",
     "live",
     "deploy",
@@ -39,10 +40,21 @@ def log(message: str) -> None:
 
 
 def run(command: list[str | Path], cwd: Path = PROJECT_DIR) -> None:
+    """Run a command with proper error handling and logging."""
     printable = " ".join(str(part) for part in command)
-    completed = subprocess.run([str(part) for part in command], cwd=cwd)
-    if completed.returncode != 0:
-        raise SystemExit(f"Command failed ({completed.returncode}): {printable}")
+    try:
+        completed = subprocess.run(
+            [str(part) for part in command],
+            cwd=cwd,
+            capture_output=False,
+            text=True
+        )
+        if completed.returncode != 0:
+            raise SystemExit(f"\n✗ Command failed ({completed.returncode}):\n  {printable}")
+    except FileNotFoundError as e:
+        raise SystemExit(f"\n✗ Command not found: {printable}\n  Error: {e}")
+    except Exception as e:
+        raise SystemExit(f"\n✗ Error running command: {printable}\n  Error: {e}")
 
 
 def python_command() -> str:
@@ -204,98 +216,118 @@ def parse_args() -> argparse.Namespace:
 
 
 def main() -> None:
-    args = parse_args()
-    needs_python = args.mode not in {"deploy", "destroy"}
-    if needs_python:
-        install_dependencies(args.skip_install)
+    try:
+        args = parse_args()
+        log(f"Mode: {args.mode} | Epochs: {args.epochs} | Samples: {args.samples}")
+        
+        needs_python = args.mode not in {"deploy", "destroy"}
+        if needs_python:
+            install_dependencies(args.skip_install)
 
-    if args.mode == "deploy":
-        log("Deploying ContainerLab topology")
-        run(["containerlab", "deploy", "-t", "topology.clab.yml"], cwd=PROJECT_DIR / "containerlab")
-        return
-    if args.mode == "destroy":
-        log("Destroying ContainerLab topology")
-        run(["containerlab", "destroy", "-t", "topology.clab.yml"], cwd=PROJECT_DIR / "containerlab")
-        return
+        if args.mode == "deploy":
+            log("✓ Deploying ContainerLab topology")
+            run(["containerlab", "deploy", "-t", "topology.clab.yml"], cwd=PROJECT_DIR / "containerlab")
+            log("✓ Deployment complete")
+            return
+        if args.mode == "destroy":
+            log("✓ Destroying ContainerLab topology")
+            run(["containerlab", "destroy", "-t", "topology.clab.yml"], cwd=PROJECT_DIR / "containerlab")
+            log("✓ Destruction complete")
+            return
 
-    run_dir, data_file = new_run_dir(args.mode)
+        run_dir, data_file = new_run_dir(args.mode)
+        log(f"Run directory: {run_dir}")
 
-    if args.mode == "synthetic":
-        log("Generating synthetic telemetry")
-        run([python_command(), "ml/generate_data.py", "--hours", str(args.samples), "--output", data_file, "--seed", "7"])
-        run_model_pipeline(args, data_file, run_dir)
-    elif args.mode == "kaggle":
-        rows = 8000 if args.samples == 720 else args.samples
-        log("Loading Kaggle network telemetry")
-        load_kaggle(data_file, rows, args.l_ipn)
-        run_model_pipeline(args, data_file, run_dir)
-    elif args.mode in {"kaggle_opt", "dataset_opt"}:
-        if args.mode == "kaggle_opt":
+        if args.mode == "synthetic":
+            log("✓ Generating synthetic telemetry")
+            run([python_command(), "ml/generate_data.py", "--hours", str(args.samples), "--output", data_file, "--seed", "7"])
+            run_model_pipeline(args, data_file, run_dir)
+        elif args.mode == "kaggle":
             rows = 8000 if args.samples == 720 else args.samples
-            log("Loading Kaggle network telemetry")
+            log("✓ Loading Kaggle network telemetry")
             load_kaggle(data_file, rows, args.l_ipn)
-        else:
+            run_model_pipeline(args, data_file, run_dir)
+        elif args.mode in {"kaggle_opt", "dataset_opt"}:
+            if args.mode == "kaggle_opt":
+                rows = 8000 if args.samples == 720 else args.samples
+                log("✓ Loading Kaggle network telemetry")
+                load_kaggle(data_file, rows, args.l_ipn)
+            else:
+                source = ML_DIR / "telemetry.csv"
+                if not source.exists():
+                    raise SystemExit(f"✗ dataset_opt needs ml/telemetry.csv (not found). Use kaggle_opt for Kaggle data.")
+                shutil.copy2(source, data_file)
+            run_dataset_model(data_file, run_dir)
+        elif args.mode == "public_benchmark":
+            log("✓ Loading CICIDS2017 public benchmark dataset")
+            run([python_command(), "ml/load_public_benchmark.py", "--samples", str(args.samples), "--output", data_file])
+            run_model_pipeline(args, data_file, run_dir)
+        elif args.mode == "simulate":
+            log("✓ Collecting simulated telemetry")
+            run(
+                [
+                    python_command(),
+                    "scripts/collect_telemetry.py",
+                    "--mode",
+                    "simulate",
+                    "--samples",
+                    str(args.samples),
+                    "--interval",
+                    str(args.interval),
+                    "--output",
+                    data_file,
+                ]
+            )
+            run_model_pipeline(args, data_file, run_dir)
+        elif args.mode == "live":
+            log("✓ Collecting live telemetry")
+            run(
+                [
+                    python_command(),
+                    "scripts/collect_telemetry.py",
+                    "--mode",
+                    "live",
+                    "--samples",
+                    str(args.samples),
+                    "--interval",
+                    str(args.interval),
+                    "--output",
+                    data_file,
+                ]
+            )
+            run_model_pipeline(args, data_file, run_dir)
+        elif args.mode == "train":
             source = ML_DIR / "telemetry.csv"
             if not source.exists():
-                raise SystemExit("dataset_opt needs ml/telemetry.csv, or use kaggle_opt for Kaggle data.")
+                raise SystemExit(f"✗ No ml/telemetry.csv found for train mode.")
+            run_model_pipeline(args, source, run_dir)
+        elif args.mode == "benchmark":
+            source = ML_DIR / "telemetry.csv"
+            if not source.exists():
+                raise SystemExit(f"✗ No ml/telemetry.csv found for benchmark mode.")
             shutil.copy2(source, data_file)
-        run_dataset_model(data_file, run_dir)
-    elif args.mode == "simulate":
-        log("Collecting simulated telemetry")
-        run(
-            [
-                python_command(),
-                "scripts/collect_telemetry.py",
-                "--mode",
-                "simulate",
-                "--samples",
-                str(args.samples),
-                "--interval",
-                str(args.interval),
-                "--output",
-                data_file,
-            ]
-        )
-        run_model_pipeline(args, data_file, run_dir)
-    elif args.mode == "live":
-        log("Collecting live telemetry")
-        run(
-            [
-                python_command(),
-                "scripts/collect_telemetry.py",
-                "--mode",
-                "live",
-                "--samples",
-                str(args.samples),
-                "--interval",
-                str(args.interval),
-                "--output",
-                data_file,
-            ]
-        )
-        run_model_pipeline(args, data_file, run_dir)
-    elif args.mode == "train":
-        source = ML_DIR / "telemetry.csv"
-        if not source.exists():
-            raise SystemExit("No ml/telemetry.csv found for train mode.")
-        run_model_pipeline(args, source, run_dir)
-    elif args.mode == "benchmark":
-        source = ML_DIR / "telemetry.csv"
-        if not source.exists():
-            raise SystemExit("No ml/telemetry.csv found for benchmark mode.")
-        shutil.copy2(source, data_file)
-        log("Running universal benchmark")
-        run(auto_benchmark_args(args, data_file, run_dir, sync_docs=True))
-    elif args.mode == "visualize":
-        latest = latest_visualizable_run()
-        if latest is None:
-            raise SystemExit("No run folders with readable CSV artifacts found.")
-        run_dir = latest
-        log(f"Building dashboard from {run_dir}")
-        run([python_command(), "ml/visualize.py", "--data", run_dir / "raw_data" / "telemetry.csv", "--output-dir", run_dir])
+            log("✓ Running universal benchmark (meta-policy enabled)")
+            run(auto_benchmark_args(args, data_file, run_dir, sync_docs=True))
+        elif args.mode == "visualize":
+            latest = latest_visualizable_run()
+            if latest is None:
+                raise SystemExit("✗ No run folders with readable CSV artifacts found.")
+            run_dir = latest
+            log(f"✓ Building dashboard from {run_dir}")
+            run([python_command(), "ml/visualize.py", "--data", run_dir / "raw_data" / "telemetry.csv", "--output-dir", run_dir])
 
-    log("Done")
-    show_artifacts(run_dir)
+        log("✓ Done")
+        show_artifacts(run_dir)
+        
+    except KeyboardInterrupt:
+        log("⚠ Interrupted by user")
+        sys.exit(130)
+    except SystemExit as e:
+        print(str(e), file=sys.stderr)
+        sys.exit(1 if "✗" in str(e) else 0)
+    except Exception as e:
+        log(f"✗ Unexpected error: {e}")
+        sys.exit(1)
 
 
 if __name__ == "__main__":

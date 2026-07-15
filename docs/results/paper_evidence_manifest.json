@@ -1,0 +1,10 @@
+{
+  "synthetic_evaluation": "docs/results/synthetic_evaluation_summary.json",
+  "generic_csv_evaluation": "docs/results/generic_evaluation_summary.json",
+  "external_csv_evaluation": "docs/results/external_csv_evaluation_summary.json",
+  "public_benchmark_evaluation": "docs/results/public_benchmark_evaluation_summary.json",
+  "candidate_selection_ablation": "docs/results/ablation_selection_summary.json",
+  "spike_loss_ablation": "docs/results/ablation_spike_loss_summary.json",
+  "significance_tests": "<one per run_dir>/results/significance_tests.csv",
+  "sequence_model_comparison": "docs/results/sequence_model_comparison.csv"
+}

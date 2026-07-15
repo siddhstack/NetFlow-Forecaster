@@ -1,88 +1,91 @@
-NetFlow-Forecaster is a non-technical, operational demo of how network telemetry can be turned into practical next-step forecasts for traffic, latency, and packet loss. It is intended to help network teams understand whether machine learning can reliably anticipate short-term network behavior and whether those predictions are better than simple fallback methods.
+NetFlow-Forecaster is a reproducible benchmarking framework for short-term
+network telemetry forecasting (traffic, latency, packet loss), built around
+two things: (1) a hybrid attention-LSTM + Gradient Boosting forecaster, and
+(2) a lightweight, persistent, bandit-guided meta-policy that automatically
+selects which training configuration to try next, gated on domain-specific
+spike-detection criteria rather than plain error metrics alone.
 
-Initial requirement diagram:
-
-```text
-Telemetry input (CSV / NetFlow / live capture)
-               |
-               v
-      Feature preparation + chronological split
-               |
-               v
-    Forecast models:
-      - LSTM sequence model
-      - Gradient Boosting with lag/rolling features
-               |
-               v
-        Forecast outputs + spike detection
-               |
-               v
-      Evaluation, dashboards, and reports
-```
+The forecasting architecture itself (attention-LSTM + Gradient Boosting
+ensembling) follows established patterns in the hybrid time-series
+forecasting literature. What this project contributes is the automated,
+experience-driven candidate-selection loop and its application, with
+transparent quality gates, to joint network telemetry forecasting.
 
 # NetFlow-Forecaster
 
-Applied network telemetry forecasting for traffic, latency, and packet loss.
-
-NetFlow-Forecaster is a practical ML pipeline that turns telemetry CSVs,
-synthetic trials, Kaggle flow data, and live ContainerLab samples into
-reproducible forecasting runs with dashboards, baseline comparisons, spike
-metrics, and model artifacts.
+Applied network telemetry forecasting with automated, self-improving
+candidate selection.
 
 ## Highlights
 
-- Forecasts `traffic_mbps`, `latency_ms`, and `packet_loss_pct` together.
-- Uses chronological time-series splits and train-only scaling.
-- Combines an LSTM-based sequence model with Gradient Boosting over lag and
-  rolling-window features.
-- Compares results against persistence and moving-average baselines.
-- Tracks spike precision, recall, and F1 instead of only aggregate loss.
-- Produces dashboards, JSON summaries, CSV reports, model files, and readable
-  model reports for every complete run.
-- Includes synthetic, Kaggle, local CSV, and live ContainerLab workflows.
+- Forecasts `traffic_mbps`, `latency_ms`, and `packet_loss_pct` jointly.
+- Hybrid attention-LSTM + Gradient Boosting ensemble with a spike-weighted
+  training loss.
+- A persistent, UCB-style meta-policy (ml/meta_policy.py) that ranks
+  candidate training configurations using cross-run experience, rather than
+  a fixed schedule or grid search.
+- Ablation studies quantifying the meta-policy's and the spike-weighted
+  loss's actual contribution (see "Ablation Studies" below) instead of
+  asserting them.
+- Statistical significance testing (paired t-test, Diebold-Mariano) on every
+  evaluated run, not just point-estimate MAE comparisons.
+- Evaluated on synthetic, local CSV, external NetFlow CSV, and CICIDS2017
+  (public benchmark) data.
 
 ## Current Evidence
-
-The checked-in evidence includes synthetic, local CSV, and larger external CSV
-trials. These are useful reproducible demos, not claims of production readiness.
 
 | Dataset | Rows | Quality | MAE vs Persistence | Traffic Spike F1 | Status |
 |---|---:|---:|---:|---:|---|
 | Synthetic | 2000 | 89.8% | +9.2% | 0.874 | Best checked-in demo |
 | Generic `ml/telemetry.csv` | 3000 | 81.8% | +18.3% | 0.810 | Local CSV demo |
 | External NetFlow CSV | 120000 | 73.0% | +34.7% | 0.887 | Large CSV trial |
+| CICIDS2017 (public) | <PLACEHOLDER — DO NOT INVENT: run ml/load_public_benchmark.py + training pipeline> | | | | |
 
-The requested `>=90%` quality gate was not reached by these measured evidence
-runs. The synthetic, generic, and external CSV demos do beat persistence on
-every tracked MAE target and pass the traffic spike F1 gate.
+The requested `>=90%` quality gate has not yet been reached by these
+checked-in runs. See "Ablation Studies" below for the automated search that
+targets this gate, and its measured effect.
 
-Dashboard examples:
+Statistical significance (paired t-test and Diebold-Mariano test, model vs.
+persistence baseline) is now computed automatically for every run; see
+`results/significance_tests.csv` inside each run directory.
 
-![Synthetic traffic prediction dashboard](docs/images/synthetic_traffic_prediction_dashboard.png)
+## Ablation Studies
 
-![Synthetic model evaluation dashboard](docs/images/synthetic_model_evaluation_dashboard.png)
+Two ablations isolate the contributions this project actually claims:
 
-![Generic telemetry traffic prediction dashboard](docs/images/generic_traffic_prediction_dashboard.png)
+### 1. Candidate-selection strategy (ml/ablation_selection.py)
 
-![Generic telemetry model evaluation dashboard](docs/images/generic_model_evaluation_dashboard.png)
+Compares three ways of choosing the next training configuration to try:
+a fixed default order, a random order, and the persisted meta-policy
+(ml/meta_policy.py). Measures attempts-to-reach-90%-quality-gate and final
+quality for each, per dataset.
 
-![External CSV traffic prediction dashboard](docs/images/external_csv_traffic_prediction_dashboard.png)
+Run:
+```
+python ml/ablation_selection.py --data ml/telemetry.csv --output-dir runs/ablation_selection
+```
 
-![External CSV model evaluation dashboard](docs/images/external_csv_model_evaluation_dashboard.png)
+Results: `docs/results/ablation_selection_summary.json`
 
-Tracked evidence files:
+<PLACEHOLDER — DO NOT INVENT: fill in attempts-to-gate and quality numbers
+per strategy per dataset only after running the script above.>
 
-- `docs/results/synthetic_evaluation_summary.json`
-- `docs/results/synthetic_evaluation_baselines.csv`
-- `docs/results/synthetic_evaluation_spikes.csv`
-- `docs/results/generic_evaluation_summary.json`
-- `docs/results/generic_evaluation_baselines.csv`
-- `docs/results/generic_evaluation_spikes.csv`
-- `docs/results/external_csv_evaluation_summary.json`
-- `docs/results/external_csv_evaluation_baselines.csv`
-- `docs/results/external_csv_evaluation_comparison.csv`
-- `docs/results/external_csv_evaluation_spikes.csv`
-- `docs/results/sequence_model_comparison.csv`
+### 2. Spike-weighted loss configuration (ml/ablation_spike_loss.py)
+
+Compares three loss configurations, each run across 3 seeds: no spike
+weighting (plain MSE), uniform spike weighting (the current shipped
+default), and differentiated per-feature spike weighting (the value the
+code's own docstring recommends but never benchmarks).
+
+Run:
+```
+python ml/ablation_spike_loss.py --data ml/telemetry.csv --output-dir runs/ablation_spike_loss
+```
+
+Results: `docs/results/ablation_spike_loss_summary.json`
+
+<PLACEHOLDER — DO NOT INVENT: fill in mean +/- std MAE and spike F1 per
+condition per feature only after running the script above.>
 
 ## How It Works
 
@@ -183,6 +186,12 @@ Universal benchmark on `ml/telemetry.csv`:
 .\runners\run.ps1 benchmark -TargetQuality 90 -MaxAttempts 12
 ```
 
+Public benchmark dataset:
+
+```powershell
+.\runners\run.ps1 public_benchmark --samples 5000 --epochs 60
+```
+
 ## Common Workflows
 
 ### Synthetic Trial
@@ -269,6 +278,7 @@ results/train_losses.csv
 results/evaluation_comparison.csv
 results/evaluation_baselines.csv
 results/evaluation_spikes.csv
+results/significance_tests.csv
 json/metrics.json
 json/evaluation_summary.json
 json/model_metadata.json
@@ -284,29 +294,36 @@ The `runs/` directory is ignored by git because it can contain large generated
 models and experiment artifacts. The curated evidence copied into `docs/` is
 tracked.
 
-## Model Notes
+## Reproducibility
 
-The current trainer uses:
+- Source and all evaluation code are under the MIT License (see LICENSE).
+- Continuous integration compiles the ML scripts, runs the full pytest
+  suite, and executes an auto-benchmark smoke test on every push (see
+  .github/workflows/ci.yml).
+- See CITATION.cff for citation metadata. This repository is archived on
+  Zenodo: <PLACEHOLDER — DO NOT INVENT: DOI, filled in after Zenodo
+  archival by the human author>.
+- See CHANGELOG.md for a dated history of methodology changes, including
+  the spike false-positive fix pass and the additions in this document.
 
-- A small additive attention layer over LSTM time steps.
-- LayerNorm and a residual final-state connection.
-- Gradient Boosting over lag and rolling-window features.
-- Validation-tuned per-feature ensemble weights.
-- Optional ONNX export for the LSTM component.
-- Residual-normal 95% forecast bands.
-- Automatic CUDA use when PyTorch detects a GPU.
+## Important Limitations
 
-Important limitations:
-
-- This is not a foundation model, transformer forecaster, or autonomous network
-  controller.
+- This is not a foundation model, transformer forecaster, or autonomous
+  network controller.
 - The attention model is not a Transformer or Temporal Fusion Transformer.
-- The neural component is still an LSTM-based forecasting model with practical
-  tabular augmentation.
-- Prediction intervals are approximate, not full probabilistic forecasts.
-- Synthetic performance does not guarantee live-network performance.
-- External data quality, spike frequency, and split behavior can change results
-  substantially.
+- The hybrid LSTM + Gradient Boosting architecture follows established
+  patterns in the forecasting literature; it is not claimed as a novel
+  architecture. The candidate-selection meta-policy and its measured effect
+  (see Ablation Studies) are the project's differentiating contribution.
+- Prediction intervals are approximate (residual-normal 95% bands), not
+  full probabilistic/conformal forecasts.
+- The `packet_loss_pct` column derived from CICIDS2017 is a proxy built
+  from retransmission/flag-based fields, not a directly measured network
+  loss statistic — see ml/load_public_benchmark.py docstring.
+- Synthetic and public-benchmark performance do not guarantee live-network
+  performance. The >=90% quality gate has not yet been reached on any
+  checked-in real-data run.
+- No human/operator evaluation has been performed; only automated metrics.
 
 ## Testing
 

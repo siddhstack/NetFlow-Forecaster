@@ -24,6 +24,7 @@ from enhanced_train import EnhancedMultivariateTrafficLSTM, StackedHybridLSTM
 from metrics_utils import FEATURE_WEIGHTS, feature_quality, quality_score_v2, spike_thresholds_from_quantile
 from train_model import FEATURES, MultivariateTrafficLSTM
 from run_layout import artifact_path, ensure_run_layout, find_artifact
+from significance_tests import run_for_dir as run_significance_tests
 
 
 UNITS = {
@@ -47,6 +48,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--spike-quantile", type=float, default=0.90, help="Training quantile used for spike thresholds when none are saved.")
     parser.add_argument("--export-docs", action="store_true", help="Copy evaluation artifacts to docs/results and docs/images.")
     parser.add_argument("--docs-prefix", default="", help="Optional prefix for exported docs artifact names, such as kaggle_ or synthetic_.")
+    parser.add_argument("--skip-significance", action="store_true", default=False, help="Skip significance testing for large runs.")
     return parser.parse_args()
 
 
@@ -667,6 +669,22 @@ def main() -> None:
     print(f"Evaluation dashboard saved -> {output_path}")
     print(f"Evaluation summary saved -> {artifact_path(run_dir, 'evaluation_summary.json', 'json')}")
     print(f"Model metadata saved -> {artifact_path(run_dir, 'model_metadata.json', 'json')}")
+    
+    # Run significance tests automatically
+    if not args.skip_significance:
+        try:
+            sig_rows = run_significance_tests(run_dir)
+            if sig_rows:
+                sig_path = artifact_path(run_dir, "significance_tests.csv", "results")
+                import csv
+                with open(sig_path, "w", newline="") as f:
+                    writer = csv.DictWriter(f, fieldnames=sig_rows[0].keys())
+                    writer.writeheader()
+                    writer.writerows(sig_rows)
+                print(f"Significance tests saved -> {sig_path}")
+        except Exception as e:
+            print(f"Warning: significance tests failed: {e}")
+    
     if args.export_docs:
         docs_root = Path(__file__).resolve().parents[1] / "docs"
         docs_images = docs_root / "images"

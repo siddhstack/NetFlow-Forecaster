@@ -115,6 +115,19 @@ def next_candidate(profile: TelemetryProfile, attempts: list[dict]) -> Candidate
     return candidates[len(attempts) % len(candidates)]
 
 
+def random_order(profile: TelemetryProfile, seed: int = 7) -> list[Candidate]:
+    """Return candidates_for_profile(profile) in a seeded random order.
+    
+    Used only by ml/ablation_selection.py as a control condition; production
+    training paths (self_improve.py, auto_benchmark.py) are unaffected.
+    """
+    import numpy as np
+    candidates = candidates_for_profile(profile)
+    rng = np.random.default_rng(seed)
+    order = rng.permutation(len(candidates))
+    return [candidates[i] for i in order]
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--data", required=True)
