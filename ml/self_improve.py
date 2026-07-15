@@ -7,6 +7,24 @@ import json
 from dataclasses import asdict
 from pathlib import Path
 
+
+def log_system_warning(message: str) -> None:
+    print(f"[self_improve] WARNING: {message}")
+
+
+def verify_and_deploy_ensemble(tournament_winner, baseline_model, validation_data):
+    """Protect the deployment path from regressions by falling back to the baseline."""
+    ml_metrics = tournament_winner.evaluate(validation_data)
+    baseline_metrics = baseline_model.evaluate(validation_data)
+
+    ml_loss = float(ml_metrics.get("weighted_loss", float("inf")))
+    baseline_loss = float(baseline_metrics.get("weighted_loss", float("inf")))
+
+    if ml_loss > baseline_loss:
+        log_system_warning("Autonomous optimization failed to beat baseline. Triggering fallback.")
+        return baseline_model
+    return tournament_winner
+
 from auto_benchmark import BenchmarkResult, gates_pass, load_summary, sync_docs, train_candidate
 from experience_store import ExperienceRecord, append_record, fingerprint, update_policy_incremental, utc_now
 from metrics_utils import diagnose_quality_shortfall

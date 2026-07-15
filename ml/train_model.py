@@ -80,20 +80,23 @@ class SpikeWeightedLoss(nn.Module):
         )
 
     def forward(self, pred: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
-        error = (pred - target).abs()
+        error = pred - target
+        squared_error = error**2
         focal = (
             1.0
             if self.focal_gamma <= 0
-            else 1.0 + error.pow(self.focal_gamma)
+            else 1.0 + error.abs().pow(self.focal_gamma)
         )
         spike_mask = (target > self.thresholds).float()
-        spike_weights = (
-            1.0
-            + self.spike_weight
-            * spike_mask
-            * self.per_feature_spike_multipliers
-        )
-        return (spike_weights * focal * (pred - target) ** 2).mean()
+        feature_weight_matrix = self.per_feature_spike_multipliers.to(device=pred.device).view(1, -1)
+        spike_weight_matrix = 1.0 + self.spike_weight * spike_mask.to(device=pred.device) * feature_weight_matrix
+        composite_weight_matrix = feature_weight_matrix * spike_weight_matrix
+
+        # Explicitly mirror the paper-ready formulation
+        # $\mathcal{L}_{\text{total}} = \mathbf{e}^{T}(\mathbf{W}_{\text{feature}} \odot \mathbf{W}_{\text{spike}})\mathbf{e}$
+        error_vector = squared_error * focal
+        weighted_error = error_vector * composite_weight_matrix
+        return weighted_error.sum(dim=-1).mean()
 
 
 def create_sequences(data: np.ndarray, seq_len: int) -> tuple[np.ndarray, np.ndarray]:

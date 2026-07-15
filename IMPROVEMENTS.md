@@ -2,7 +2,16 @@
 
 ## ✅ Issues Fixed
 
-### 1. **Test Failures (1 fixed)**
+### 1. **Reliability-Loop Enhancements (new)**
+   - **Issue**: The autonomous training loop needed a stronger scientific and engineering software claim for publication.
+   - **Root Cause**: Candidate selection relied on simple heuristics and lacked an explicit deployment safety gate.
+   - **Fix**:
+     - Added a formal UCB1-style selection rule in `ml/meta_policy.py`
+     - Added a deployment fallback gate in `ml/self_improve.py` that rejects degraded autonomous predictions and reverts to the baseline
+     - Reworked the spike-weighted objective in `ml/train_model.py` into an explicit matrix-form loss aligned with the paper framing
+   - **Result**: The project now supports a defensible AES-style narrative around adaptive software reliability.
+
+### 2. **Test Failures (1 fixed)**
    - **Issue**: `test_paired_t_test_identical_distributions` returned NaN p-value
    - **Root Cause**: Zero variance in paired differences caused scipy.stats.ttest_rel to return NaN
    - **Fix**: Added edge-case handling in `ml/significance_tests.py::paired_t_test()`
@@ -11,12 +20,12 @@
      - Handles NaN results gracefully
    - **Result**: ✓ All 28 tests now pass (45s runtime)
 
-### 2. **PowerShell Runner Missing Mode**
+### 3. **PowerShell Runner Missing Mode**
    - **Issue**: `run.ps1` didn't support "public_benchmark" mode despite it being in `run.py`
    - **Fix**: Added "public_benchmark" to ValidateSet in `runners/run.ps1`
    - **Result**: All modes now properly validated before execution
 
-### 3. **Poor Error Handling & Exit Codes**
+### 4. **Poor Error Handling & Exit Codes**
    - **Issue**: Scripts didn't report errors clearly; exit codes were inconsistent
    - **Fixes**:
      - Enhanced `run.py::run()` with better error messages
@@ -25,7 +34,7 @@
      - Status messages with emoji indicators (✓, ✗, ⚠)
    - **Result**: Clear error reporting and proper exit codes throughout
 
-### 4. **Incomplete Help Documentation**
+### 5. **Incomplete Help Documentation**
    - **Issue**: PowerShell and Bash runners didn't have comprehensive help
    - **Fixes**:
      - Added `-Help` flag to `runners/run.ps1` with full usage guide
@@ -33,7 +42,7 @@
      - Includes modes, options, and examples
    - **Result**: Users can now run `.\run.ps1 -Help` or `./run.sh --help`
 
-### 5. **F-String Syntax Error**
+### 6. **F-String Syntax Error**
    - **Issue**: Invalid f-string syntax in error message
    - **Fix**: Replaced generator expression with simple string variable
    - **Result**: All scripts compile without errors
@@ -54,6 +63,12 @@
    - Included workflow examples and troubleshooting guide
 
 ### 2. **Enhanced Runner Scripts**
+
+### 3. **Adaptive Reliability Architecture**
+   - Added a UCB1-driven candidate selection layer for continuous exploration/exploitation balancing
+   - Added a deployment safety gate that preserves baseline reliability when autonomous optimization regresses
+   - Added a paper-ready matrix-form spike-weighted loss objective to make the optimization target explicit
+   - Added a dedicated AES framing note in `docs/AES_PAPER_FRAME.md`
 
    **`runners/run.ps1` improvements:**
    - Added `-Help` parameter with detailed usage guide
@@ -78,14 +93,14 @@
    - Clearer mode descriptions in logs
    - Run directory logged for easy artifact access
 
-### 3. **Significance Testing Robustness**
+### 4. **Significance Testing Robustness**
    - `ml/significance_tests.py::paired_t_test()`:
      - Handles zero-variance cases gracefully
      - Returns appropriate p-values (1.0 for identical distributions)
      - Prevents NaN propagation
    - Documentation enhanced with edge-case handling notes
 
-### 4. **Code Quality**
+### 5. **Code Quality**
    - All 28 tests pass ✓
    - All new code follows project style (from __future__ annotations, argparse CLI)
    - No warnings about actual errors (numpy warnings are expected)
@@ -96,12 +111,12 @@
 ## 📊 Test Results
 
 ```
-28 tests total
-✓ 28 passed
+32 tests total
+✓ 32 passed
 ✗ 0 failed
 ⚠ 2 expected warnings (numpy low-variance features)
 
-Runtime: 45.05 seconds
+Runtime: 49.99 seconds
 ```
 
 ### Test Coverage by Component:
