@@ -65,7 +65,7 @@ Run:
 python ml/ablation_selection.py --data ml/telemetry.csv --output-dir runs/ablation_selection
 ```
 
-Results: `docs/results/ablation_selection_summary.json`
+Results: `<output-dir>/ablation_selection_summary.json`
 
 <PLACEHOLDER — DO NOT INVENT: fill in attempts-to-gate and quality numbers
 per strategy per dataset only after running the script above.>
@@ -82,7 +82,7 @@ Run:
 python ml/ablation_spike_loss.py --data ml/telemetry.csv --output-dir runs/ablation_spike_loss
 ```
 
-Results: `docs/results/ablation_spike_loss_summary.json`
+Results: `<output-dir>/ablation_spike_loss_summary.json`
 
 <PLACEHOLDER — DO NOT INVENT: fill in mean +/- std MAE and spike F1 per
 condition per feature only after running the script above.>

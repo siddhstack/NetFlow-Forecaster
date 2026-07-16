@@ -82,6 +82,7 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser()
     parser.add_argument("--data", default="ml/telemetry.csv")
     parser.add_argument("--epochs", type=int, default=80)
+    parser.add_argument("--seed", type=int, default=42, help="Random seed for PyTorch, NumPy, and Gradient Boosting.")
     parser.add_argument("--sequence-length", type=int, default=96)
     parser.add_argument("--batch-size", type=int, default=32)
     parser.add_argument("--hidden-size", type=int, default=128)
@@ -104,6 +105,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--grad-accum-steps", type=int, default=2)
     parser.add_argument("--gb-weight", type=float, default=0.65)
     parser.add_argument("--lstm-weight", type=float, default=0.35)
+    parser.add_argument("--gb-estimators", type=int, default=500, help="Number of Gradient Boosting estimators.")
     parser.add_argument("--tune-ensemble-weights", action="store_true", default=True)
     parser.add_argument("--device", choices=["auto", "cpu", "cuda"], default="auto")
     parser.add_argument("--export-onnx", action=argparse.BooleanOptionalAction, default=False, help="Export the LSTM component to ONNX.")
@@ -236,8 +238,10 @@ def optimize_persistence_blend(model_pred: np.ndarray, actuals: np.ndarray) -> n
 
 def main() -> None:
     args = parse_args()
-    torch.manual_seed(42)
-    np.random.seed(42)
+    torch.manual_seed(args.seed)
+    np.random.seed(args.seed)
+    if torch.cuda.is_available():
+        torch.cuda.manual_seed_all(args.seed)
     if args.device == "cuda" and not torch.cuda.is_available():
         raise RuntimeError("CUDA was requested but is not available.")
     if args.device == "auto":
@@ -398,7 +402,7 @@ def main() -> None:
         spike_thresholds_from_quantile(y_gb[gb_train_slice], args.spike_quantile),
     )
     gb = MultiOutputRegressor(
-        GradientBoostingRegressor(n_estimators=500, learning_rate=0.04, max_depth=4, subsample=0.85, random_state=42)
+        GradientBoostingRegressor(n_estimators=args.gb_estimators, learning_rate=0.04, max_depth=4, subsample=0.85, random_state=args.seed)
     )
     gb.fit(gb_train_x, gb_train_y)
 

@@ -39,7 +39,7 @@ packet_loss_pct (float)
 
 ### Step 2: Feature Preparation & Splitting
 
-**Handler**: `ml/splits.py::create_sequences()` and `ml/splits.py::gb_sequence_slice()`
+**Handler**: `ml/train_model.py::create_sequences()`; Gradient Boosting alignment is handled in `ml/enhanced_train.py`.
 
 **Process**:
 1. Read telemetry CSV (timestamp order preserved)
@@ -139,7 +139,7 @@ Measures: How much does the meta-policy help vs. fixed/random ordering?
 2. `random_order` - Shuffle candidate order each run
 3. `meta_policy` - Use persisted UCB rankings (default)
 
-**Output**: `docs/results/ablation_selection_summary.json`
+**Output**: `<output-dir>/ablation_selection_summary.json`
 ```json
 {
   "strategy": {
@@ -163,7 +163,7 @@ Measures: Does spike weighting actually improve spike detection?
 2. `uniform_spike_weighting` - Fixed spike weight (current default)
 3. `differentiated_spike_weighting` - Per-feature multipliers (0.0, 1.8, 2.5)
 
-**Output**: `docs/results/ablation_spike_loss_summary.json`
+**Output**: `<output-dir>/ablation_spike_loss_summary.json`
 ```json
 {
   "condition": {
@@ -195,7 +195,6 @@ ai_network_project/
 │   ├── evaluate_model.py             # Evaluation + significance tests auto-call
 │   ├── significance_tests.py         # DM + t-test implementations
 │   ├── predict.py                    # Single-step forecasting
-│   ├── splits.py                     # Chronological split + feature creation
 │   ├── metrics_utils.py              # Quality gates, spike detection
 │   ├── spike_loss.py                 # Spike-weighted MSE loss
 │   ├── visualize.py                  # Dashboard generation
@@ -306,7 +305,7 @@ ai_network_project/
 python ml/ablation_spike_loss.py --data ml/telemetry.csv --output-dir runs/ablation_spike_loss
 # → Tests 3 loss configurations × 3 seeds
 # → Outputs: runs/ablation_spike_loss/
-# → Summary: docs/results/ablation_spike_loss_summary.json
+# → Summary: runs/ablation_spike_loss/ablation_spike_loss_summary.json
 ```
 
 ---

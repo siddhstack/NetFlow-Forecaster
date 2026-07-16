@@ -29,18 +29,15 @@ def test_ablation_spike_loss_output():
             "--data", str(data_csv),
             "--output-dir", str(tmpdir / "ablation"),
             "--epochs", "2",
+            "--gb-estimators", "5",
             "--seeds", "7",
         ]
         
-        try:
-            ablation_main()
-        except Exception:
-            pass
-        
-        # Check JSON summary
-        json_file = ROOT / "docs" / "results" / "ablation_spike_loss_summary.json"
-        if json_file.exists():
-            summary = json.loads(json_file.read_text())
-            assert "no_spike_weighting" in summary
-            assert "uniform_spike_weighting" in summary
-            assert "differentiated_spike_weighting" in summary
+        ablation_main()
+
+        json_file = tmpdir / "ablation" / "ablation_spike_loss_summary.json"
+        csv_file = tmpdir / "ablation" / "ablation_spike_loss_summary.csv"
+        assert csv_file.exists()
+        summary = json.loads(json_file.read_text())
+        for condition in ("no_spike_weighting", "uniform_spike_weighting", "differentiated_spike_weighting"):
+            assert summary[condition]["traffic_mbps"]["mean_mae"] > 0

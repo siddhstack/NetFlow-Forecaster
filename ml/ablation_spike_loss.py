@@ -10,9 +10,6 @@ import sys
 from pathlib import Path
 
 import numpy as np
-import pandas as pd
-
-from metrics_utils import compute_spike_scores, spike_thresholds_from_quantile
 from telemetry_profile import profile_telemetry
 
 
@@ -28,6 +25,7 @@ def main() -> None:
     parser.add_argument("--data", type=Path, required=True, help="Telemetry CSV.")
     parser.add_argument("--output-dir", type=Path, required=True, help="Ablation artifacts directory.")
     parser.add_argument("--epochs", type=int, default=60, help="Fixed across all conditions.")
+    parser.add_argument("--gb-estimators", type=int, default=500, help="Fixed Gradient Boosting estimator count across conditions.")
     parser.add_argument("--sequence-length", type=int, default=96, help="Fixed across all conditions.")
     parser.add_argument("--seeds", type=str, default="7,17,27", help="Comma-separated seeds.")
     args = parser.parse_args()
@@ -62,40 +60,44 @@ def main() -> None:
                 "--output-dir", str(run_dir),
                 "--epochs", str(args.epochs),
                 "--sequence-length", str(args.sequence_length),
+                "--gb-estimators", str(args.gb_estimators),
                 "--seed", str(seed),
                 "--spike-weight", cond_args["spike_weight"],
                 "--feature-spike-multipliers", cond_args["feature_spike_multipliers"],
             ]
             
-            try:
-                subprocess.run(cmd, check=True, cwd=str(ROOT))
-            except subprocess.CalledProcessError as e:
-                print(f"Training failed for {cond_name} seed {seed}: {e}")
-                continue
+            subprocess.run(cmd, check=True, cwd=str(ROOT))
             
             # Evaluate
             eval_cmd = [sys.executable, str(ML / "evaluate_model.py"), "--run-dir", str(run_dir), "--skip-significance"]
-            try:
-                subprocess.run(eval_cmd, check=True, cwd=str(ROOT))
-            except subprocess.CalledProcessError as e:
-                print(f"Evaluation failed for {cond_name} seed {seed}: {e}")
-                continue
+            subprocess.run(eval_cmd, check=True, cwd=str(ROOT))
             
             # Extract metrics
             eval_summary_path = run_dir / "json" / "evaluation_summary.json"
             if not eval_summary_path.exists():
-                continue
+                raise FileNotFoundError(f"Evaluation did not create {eval_summary_path}")
             
             eval_summary = json.loads(eval_summary_path.read_text())
+            by_feature = {row["metric"]: row for row in eval_summary.get("per_feature", [])}
+            spike_path = run_dir / "results" / "evaluation_spikes.csv"
+            if not spike_path.exists():
+                raise FileNotFoundError(f"Evaluation did not create {spike_path}")
+            with spike_path.open(newline="") as spike_file:
+                spikes_by_feature = {row["metric"]: row for row in csv.DictReader(spike_file)}
             
             for feature in FEATURES:
-                feature_data = eval_summary.get("by_feature", {}).get(feature, {})
-                mae = float(feature_data.get("mae", 0.0))
-                rmse = float(feature_data.get("rmse", 0.0))
-                r2 = float(feature_data.get("r2", 0.0))
-                spike_precision = float(feature_data.get("spike_precision", 0.0))
-                spike_recall = float(feature_data.get("spike_recall", 0.0))
-                spike_f1 = float(feature_data.get("spike_f1", 0.0))
+                feature_data = by_feature.get(feature)
+                if feature_data is None:
+                    raise KeyError(f"Evaluation summary is missing metrics for {feature}")
+                mae = float(feature_data["model_mae"])
+                rmse = float(feature_data["model_rmse"])
+                r2 = float(feature_data["model_r2"])
+                spike_data = spikes_by_feature.get(feature)
+                if spike_data is None:
+                    raise KeyError(f"Spike evaluation is missing metrics for {feature}")
+                spike_precision = float(spike_data["precision"])
+                spike_recall = float(spike_data["recall"])
+                spike_f1 = float(spike_data["f1"])
                 
                 csv_rows.append({
                     "condition": cond_name,
@@ -130,15 +132,15 @@ def main() -> None:
             }
     
     # Write outputs
-    csv_path = ROOT / "docs" / "results" / "ablation_spike_loss_summary.csv"
-    csv_path.parent.mkdir(parents=True, exist_ok=True)
-    if csv_rows:
-        with open(csv_path, "w", newline="") as f:
-            writer = csv.DictWriter(f, fieldnames=csv_rows[0].keys())
-            writer.writeheader()
-            writer.writerows(csv_rows)
+    if not csv_rows:
+        raise RuntimeError("Spike-loss ablation produced no successful runs.")
+    csv_path = output_dir / "ablation_spike_loss_summary.csv"
+    with open(csv_path, "w", newline="") as f:
+        writer = csv.DictWriter(f, fieldnames=csv_rows[0].keys())
+        writer.writeheader()
+        writer.writerows(csv_rows)
     
-    json_path = ROOT / "docs" / "results" / "ablation_spike_loss_summary.json"
+    json_path = output_dir / "ablation_spike_loss_summary.json"
     json_path.write_text(json.dumps(json_summary, indent=2))
     
     print(f"Spike-loss ablation results: {csv_path}, {json_path}")

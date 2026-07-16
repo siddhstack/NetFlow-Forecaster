@@ -43,12 +43,10 @@ def test_ablation_selection_policy_isolation():
             "--output-dir", str(tmpdir / "ablation"),
             "--strategies", "fixed",
             "--attempts-per-strategy", "1",
+            "--epochs", "1",
+            "--gb-estimators", "5",
         ]
-        
-        try:
-            ablation_main()
-        except Exception:
-            pass  # Allow errors from training; we just check file isolation
+        ablation_main()
         
         # Verify files unchanged
         policy_hash_after = hashlib.sha256(policy_file.read_bytes()).hexdigest() if policy_file.exists() else None
@@ -71,12 +69,10 @@ def test_ablation_selection_output_files():
             "--output-dir", str(tmpdir / "ablation"),
             "--strategies", "fixed",
             "--attempts-per-strategy", "1",
+            "--epochs", "1",
+            "--gb-estimators", "5",
         ]
-        
-        try:
-            ablation_main()
-        except Exception:
-            pass
+        ablation_main()
         
         # Check CSV exists and has required columns
         csv_file = tmpdir / "ablation" / f"ablation_selection_{data_csv.stem}.csv"
@@ -89,4 +85,4 @@ def test_ablation_selection_output_files():
         summary = json.loads(json_file.read_text())
         assert "fixed" in summary
         assert "attempts_to_gate" in summary["fixed"]
-        assert "best_quality_pct" in summary["fixed"]
+        assert summary["fixed"]["best_quality_pct"] > 0

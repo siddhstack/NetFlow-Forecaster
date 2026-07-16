@@ -80,13 +80,13 @@ def main() -> None:
         try:
             import kagglehub
             try:
-                ds = kagglehub.datasets_download("cicdataset/cicids2017")
+                ds = kagglehub.dataset_download("cicdataset/cicids2017")
                 csv_file = Path(ds) / "MachineLearningCSV/Friday-WorkingHours-Afternoon-DDoS.pcap_ISCX.csv"
                 if csv_file.exists():
                     df = pd.read_csv(csv_file, nrows=args.samples)
             except Exception:
                 try:
-                    ds = kagglehub.datasets_download("dhoogla/cicids2017")
+                    ds = kagglehub.dataset_download("dhoogla/cicids2017")
                     csv_files = list(Path(ds).glob("**/*.csv"))
                     if csv_files:
                         df = pd.read_csv(csv_files[0], nrows=args.samples)
