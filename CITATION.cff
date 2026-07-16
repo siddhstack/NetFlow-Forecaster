@@ -2,8 +2,8 @@ cff-version: 1.2.0
 message: "If you use this software, please cite it as below."
 title: "NetFlow-Forecaster: A Hybrid Attention-LSTM / Gradient Boosting Framework with Bandit-Guided Candidate Selection for Network Telemetry Forecasting"
 authors:
-  - family-names: "<AUTHOR LAST NAME>"
-    given-names: "<AUTHOR FIRST NAME>"
+  - family-names: "<Saravanakumar>"
+    given-names: "<Siddharth>"
 version: "1.0.0"
 date-released: "<YYYY-MM-DD>"
 repository-code: "https://github.com/siddhstack/NetFlow-Forecaster"
