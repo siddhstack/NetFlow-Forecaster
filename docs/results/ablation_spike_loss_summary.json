@@ -1,0 +1,62 @@
+{
+  "no_spike_weighting": {
+    "traffic_mbps": {
+      "mean_mae": 7.866471590719229,
+      "std_mae": 0.16521969567419242,
+      "mean_spike_f1": 0.7445889715645352,
+      "std_spike_f1": 0.011576313973123972
+    },
+    "latency_ms": {
+      "mean_mae": 0.8201170140304597,
+      "std_mae": 0.006440826019508542,
+      "mean_spike_f1": 0.4498585858585859,
+      "std_spike_f1": 0.030903993769990607
+    },
+    "packet_loss_pct": {
+      "mean_mae": 0.24019169031532348,
+      "std_mae": 0.004640026259082131,
+      "mean_spike_f1": 0.286809595633125,
+      "std_spike_f1": 0.047702180203681055
+    }
+  },
+  "uniform_spike_weighting": {
+    "traffic_mbps": {
+      "mean_mae": 9.036321648785163,
+      "std_mae": 0.23216235760321308,
+      "mean_spike_f1": 0.6929866836865392,
+      "std_spike_f1": 0.019147059160306637
+    },
+    "latency_ms": {
+      "mean_mae": 1.0779878241559737,
+      "std_mae": 0.016519413793528906,
+      "mean_spike_f1": 0.27283950617283953,
+      "std_spike_f1": 0.039899660768376075
+    },
+    "packet_loss_pct": {
+      "mean_mae": 0.2800504107816648,
+      "std_mae": 0.006606504768284287,
+      "mean_spike_f1": 0.346988489677938,
+      "std_spike_f1": 0.008814124059759927
+    }
+  },
+  "differentiated_spike_weighting": {
+    "traffic_mbps": {
+      "mean_mae": 9.054774836349678,
+      "std_mae": 0.33906324909395363,
+      "mean_spike_f1": 0.6849024042640056,
+      "std_spike_f1": 0.0052809009948056275
+    },
+    "latency_ms": {
+      "mean_mae": 1.2339082404508102,
+      "std_mae": 0.050141602194352874,
+      "mean_spike_f1": 0.2776365808623873,
+      "std_spike_f1": 0.1251818032263236
+    },
+    "packet_loss_pct": {
+      "mean_mae": 0.3613684899566402,
+      "std_mae": 0.039004094187389676,
+      "mean_spike_f1": 0.3500151253204624,
+      "std_spike_f1": 0.00978586587110367
+    }
+  }
+}

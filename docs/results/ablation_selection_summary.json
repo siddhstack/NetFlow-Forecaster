@@ -1,0 +1,20 @@
+{
+  "fixed": {
+    "attempts_to_gate": null,
+    "best_quality_pct": 81.33861327600773,
+    "mean_quality_pct": 76.40646034324192,
+    "std_quality_pct": 4.809777469530696
+  },
+  "random": {
+    "attempts_to_gate": null,
+    "best_quality_pct": 81.33861327600773,
+    "mean_quality_pct": 74.27509956663924,
+    "std_quality_pct": 5.01176657910699
+  },
+  "meta_policy": {
+    "attempts_to_gate": null,
+    "best_quality_pct": 81.33861327600773,
+    "mean_quality_pct": 76.40646034324192,
+    "std_quality_pct": 4.809777469530696
+  }
+}
